@@ -10,7 +10,40 @@ export interface ToolItem {
 }
 
 function toolLabel(name: string): string {
-  return name.replace(/_/g, ' ')
+  if (name.startsWith('agent:')) {
+    const type = name.slice(6)
+    switch (type) {
+      case 'researcher-web':
+      case 'researcher':
+        return 'Web search'
+      case 'researcher-docs':
+        return 'Docs search'
+      case 'file-picker':
+      case 'file-explorer':
+        return 'Find files'
+      case 'code-searcher':
+        return 'Search code'
+      case 'code-reviewer':
+      case 'reviewer':
+        return 'Code review'
+      case 'editor':
+        return 'Edit code'
+      case 'thinker':
+      case 'decomposing-thinker':
+        return 'Deep thinking'
+      default:
+        return `Sub-agent: ${type}`
+    }
+  }
+  switch (name) {
+    case 'read_files': return 'Read files'
+    case 'edit_transaction': return 'Edit transaction'
+    case 'web_search': return 'Web search'
+    case 'query_index': return 'Query index'
+    case 'basher': return 'Run command'
+    case 'run_terminal_command': return 'Terminal command'
+    default: return name.replace(/_/g, ' ')
+  }
 }
 
 function copyText(text: string): void {
@@ -41,12 +74,35 @@ export function Markdown({ text }: { text: string }) {
   )
 }
 
-interface WebResult {
+export interface WebResult {
   title: string
   url?: string
   snippet?: string
 }
 
+/** Extract <think>...</think> blocks and strip any leaked function calls from raw text. */
+export function extractThinkTags(rawText: string): { reasoning?: string; text: string; isThinking: boolean } {
+  // Strip any raw function:suggest_followups blocks from visible assistant text
+  let cleanedText = rawText.replace(/function:suggest_followups\s*\{[\s\S]*?\}/gi, '')
+  cleanedText = cleanedText.replace(/<suggest_followups>[\s\S]*?<\/suggest_followups>/gi, '')
+
+  if (!cleanedText.includes('<think>')) {
+    return { text: cleanedText.trim(), isThinking: false }
+  }
+
+  const thinkEndIndex = cleanedText.indexOf('</think>')
+  if (thinkEndIndex !== -1) {
+    const thinkStart = cleanedText.indexOf('<think>')
+    const reasoning = cleanedText.slice(thinkStart + '<think>'.length, thinkEndIndex).trim()
+    const text = (cleanedText.slice(0, thinkStart) + cleanedText.slice(thinkEndIndex + '</think>'.length)).trim()
+    return { reasoning: reasoning || undefined, text, isThinking: false }
+  } else {
+    const thinkStart = cleanedText.indexOf('<think>')
+    const reasoning = cleanedText.slice(thinkStart + '<think>'.length)
+    const text = cleanedText.slice(0, thinkStart).trim()
+    return { reasoning: reasoning || undefined, text, isThinking: true }
+  }
+}
 /** Try to extract search results from a tool output string (web_search / researcher tools). */
 function parseWebResults(detail: string): WebResult[] | null {
   const candidates: unknown[] = []
@@ -54,7 +110,9 @@ function parseWebResults(detail: string): WebResult[] | null {
     const parsed = JSON.parse(detail)
     if (Array.isArray(parsed)) candidates.push(...parsed)
     else if (parsed && typeof parsed === 'object') {
-      const arr = (parsed as Record<string, unknown>).results ?? (parsed as Record<string, unknown>).items
+      const rec = parsed as Record<string, unknown>
+      const dataRec = rec.data && typeof rec.data === 'object' ? (rec.data as Record<string, unknown>) : undefined
+      const arr = rec.results ?? rec.items ?? rec.sources ?? dataRec?.sources
       if (Array.isArray(arr)) candidates.push(...arr)
       else candidates.push(parsed)
     }
@@ -75,7 +133,64 @@ function parseWebResults(detail: string): WebResult[] | null {
 
 function isSearchTool(name: string): boolean {
   const n = name.toLowerCase()
-  return n.includes('web_search') || n.includes('search')
+  return n.includes('web_search') || n.includes('search') || n.includes('researcher')
+}
+
+/** Clean up raw tool detail strings (e.g. format JSON nicely). */
+function formatToolDetail(detail: string): string {
+  const trimmed = detail.trim()
+  if (!trimmed) return ''
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (parsed && typeof parsed === 'object') {
+      // Check if it's an error message object
+      if (typeof parsed.errorMessage === 'string') {
+        return parsed.errorMessage
+      }
+      if (typeof parsed.error === 'string') {
+        return parsed.error
+      }
+      if (typeof parsed.message === 'string') {
+        return parsed.message
+      }
+      // Check if it's a file_mutation_result from edit_transaction
+      if (parsed.kind === 'file_mutation_result' && Array.isArray(parsed.actions)) {
+        return parsed.actions
+          .map((a: Record<string, unknown>) => {
+            const act = String(a.action || 'modified')
+            const path = String(a.path || '')
+            const outcome = String(a.outcome || 'applied')
+            return `${act === 'create' ? 'Created' : act === 'delete' ? 'Deleted' : 'Modified'} ${path} (${outcome})`
+          })
+          .join('\n')
+      }
+      // Check if it's an agentReceipt or spawn report array
+      if (Array.isArray(parsed)) {
+        if (parsed[0]?.agentReceipt) {
+          return parsed
+            .map((item) => {
+              const r = item.agentReceipt
+              const changed =
+                Array.isArray(r?.changedFiles) && r.changedFiles.length > 0
+                  ? ` (${r.changedFiles.length} files changed)`
+                  : ''
+              return `Agent: ${item.agentName || item.agentType || 'specialist'}\nStatus: ${r?.status || 'completed'}${changed}`
+            })
+            .join('\n\n')
+        }
+        if (parsed[0]?.validationStatus) {
+          return parsed
+            .map((item) => item.message || item.validationStatus || '')
+            .filter(Boolean)
+            .join('\n')
+        }
+      }
+      return JSON.stringify(parsed, null, 2)
+    }
+  } catch {
+    // Plain text
+  }
+  return detail
 }
 
 export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) {
@@ -85,6 +200,7 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
 
   const hasDetail = Boolean(tool.detail?.trim())
   const webResults = hasDetail && isSearchTool(tool.toolName) ? parseWebResults(tool.detail ?? '') : null
+  const formattedDetail = hasDetail && !webResults ? formatToolDetail(tool.detail ?? '') : null
 
   return (
     <div className={`tool-card ${tool.status}${running ? ' running' : ''}`}>
@@ -117,8 +233,47 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
               ))}
             </div>
           ) : (
-            <pre className="tool-detail">{tool.detail}</pre>
+            <pre className="tool-detail">{formattedDetail}</pre>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Collapsible thought process (reasoning / <think>) block */
+export function ThoughtBlock({
+  reasoning,
+  streaming
+}: {
+  reasoning: string
+  streaming: boolean
+}) {
+  // While actively streaming the reasoning, expand by default.
+  // Once reasoning finishes or streaming ends, collapse by default.
+  // If the user manually toggles it, respect their preference.
+  const [userToggled, setUserToggled] = useState<boolean | null>(null)
+  const open = userToggled !== null ? userToggled : streaming
+
+  const trimmed = reasoning.trim()
+  if (!trimmed && !streaming) return null
+
+  return (
+    <div className={`thought-block ${streaming ? 'thinking' : 'done'}`}>
+      <div
+        className="thought-head"
+        onClick={() => setUserToggled((prev) => (prev !== null ? !prev : !open))}
+      >
+        <span className="thought-icon">{streaming ? '💭' : '💡'}</span>
+        <span className="thought-label">{streaming ? 'Thinking…' : 'Thought process'}</span>
+        <span className="thought-chevron">
+          <ChevronIcon open={open} size={11} />
+        </span>
+      </div>
+      {open && (
+        <div className="thought-content">
+          <div className="thought-text">{trimmed}</div>
+          {streaming && <span className="caret" />}
         </div>
       )}
     </div>
@@ -151,8 +306,23 @@ export function UserBubble({ text, onCopy, onRevert }: { text: string; onCopy?: 
   )
 }
 
-export function AssistantBubble({ text, streaming, onCopy }: { text: string; streaming: boolean; onCopy?: () => void }) {
-  if (!text.trim() && streaming) {
+export function AssistantBubble({
+  text,
+  reasoning,
+  streaming,
+  onCopy
+}: {
+  text: string
+  reasoning?: string
+  streaming: boolean
+  onCopy?: () => void
+}) {
+  const extracted = extractThinkTags(text)
+  const combinedReasoning = [reasoning?.trim(), extracted.reasoning?.trim()].filter(Boolean).join('\n\n')
+  const mainText = extracted.text
+  const isReasoningOnly = streaming && !mainText.trim() && Boolean(combinedReasoning || extracted.isThinking)
+
+  if (!mainText.trim() && !combinedReasoning && streaming) {
     return (
       <div className="msg-row assistant">
         <div className="thinking-dots">
@@ -163,14 +333,23 @@ export function AssistantBubble({ text, streaming, onCopy }: { text: string; str
       </div>
     )
   }
+
   return (
     <div className="msg-row assistant">
       <div className="msg-stack assistant">
-        <div className="assistant-bubble">
-          <Markdown text={text} />
-          {streaming && <span className="caret" />}
-        </div>
-        {onCopy && text.trim() && (
+        {combinedReasoning && (
+          <ThoughtBlock
+            reasoning={combinedReasoning}
+            streaming={streaming && (!mainText.trim() || extracted.isThinking)}
+          />
+        )}
+        {(mainText.trim() || !combinedReasoning) && (
+          <div className="assistant-bubble">
+            <Markdown text={mainText} />
+            {streaming && !isReasoningOnly && <span className="caret" />}
+          </div>
+        )}
+        {onCopy && mainText.trim() && (
           <span className="msg-actions">
             <button className="mini-btn" title="Copy" onClick={onCopy}>
               <CopyIcon size={12} />

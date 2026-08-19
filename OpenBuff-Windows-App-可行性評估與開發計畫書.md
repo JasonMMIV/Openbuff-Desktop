@@ -579,10 +579,36 @@ Phase 2「UI 大改版」完成，Phase 3「C.2 打磨清單」亦全數完成�
 
 ---
 
-## 當前開發順序（2026-08-19 更新）
+## 附錄 L：進度更新（2026-08-20）— 對話體驗主流化精簡、思考過程折疊、多步驟串流累積修復與子代理狀態可視化
+
+針對主流 AI Coding 桌面應用體驗（如 FreeBuff 等），完成了對話介面的全面精簡與強化，提供高信噪比的互動體驗與完整透明的子代理執行狀態。
+
+### L.1 本次升級與修復項目
+
+| 分類 | 項目 | 實作說明 |
+|---|---|---|
+| **對話時間軸精簡** | 內部工具與驗證 Hook 靜音 | 隱藏 `git_status`、`suggest_followups`、`run_file_change_hooks`、`run_targeted_validation` 等內部輪詢與驗證事件，避免干擾主對話流。 |
+| **工具執行狀態卡** | Raw JSON 摘要化與美化 | `ToolCard` 自動格式化 `file_mutation_result`（如 `Created sample.txt (applied)`）、解析錯誤訊息與執行結果，以折疊卡片呈現。 |
+| **思考過程視覺化** | 思考過程自動折疊 (`ThoughtBlock`) | 支援 `<think>` 與 `reasoning_stream`；串流生成時自動展開呈現思考進度，完成後自動收合為精簡標籤，支援手動切換展開。 |
+| **串流呈現修正** | 多步驟文字累積重複 Bug 修復 | 修正了助手在多步驟工具調用之間全域 Buffer 重複累積導致同一段話印出多次的 Bug，改以單回合 Bubble Delta 累加。 |
+| **子代理可視化** | 子代理（Sub-agent）主時間軸卡片 | 擴充後端傳遞 `subagent_start`（Prompt）與 `subagent_finish`（Output/Sources）；前端主對話時間軸同步顯示子代理生命週期卡片（如 `Web search`、`Find files`、`Code review` 等）。 |
+| **搜尋結果解析** | 結構化 Web Search 來源預覽 | `parseWebResults` 支援解析 `researcher-web` 結構化資料，展開即可瀏覽網頁標題、摘要與點擊開啟外部連結。 |
+
+### L.2 驗證結果
+
+| 驗證項目 | 結果 | 說明 |
+|---|---|---|
+| `npm run typecheck` | ✅ **PASS** | TypeScript 型別檢查 100% 通過 |
+| `npm run build` | ✅ **PASS** | Electron 主程序、Preload 與 Web 前端打包成功 |
+| 跨模型對話體驗測試 | ✅ **PASS** | Thinking Model 正確顯示折疊思考與直呼工具；Non-reasoning Model 正確顯示派發之子代理卡片與搜尋結果。 |
+
+---
+
+## 當前開發順序（2026-08-20 更新）
 
 1. ~~**APP 整體 Review 與邊界情境檢查**（跨平台視窗狀態、極端情況防護）~~（✅ 已完成，見附錄 J）
 2. ~~**非 Git 任務環境穩定性加固**（`git_status` Gating 抑制與編譯產物同步）~~（✅ 已完成，見附錄 K）
-3. **打包與發佈準備**（electron-builder NSIS / Portable、簽章評估、自動更新）
+3. ~~**對話體驗主流化與子代理可視化**（思考折疊、多步驟串流修正、Sub-agent 卡片）~~（✅ 已完成，見附錄 L）
+4. **打包與發佈準備**（electron-builder NSIS / Portable、簽章評估、自動更新）
 
 GitHub 相關設定與打包發佈規劃已從近期待辦事項中移除，待上述階段完成後再重新規劃。

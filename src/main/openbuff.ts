@@ -174,20 +174,29 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
       base.toolName = String(e.toolName ?? '')
       base.status = 'running'
       base.agentType = e.agentType ? String(e.agentType) : undefined
-      if (base.toolName === 'query_index') base.queryInput = normalizeQueryIndexInput(e.input)
-      // The SDK's suggest_followups tool_result only returns {message: "Followups suggested!"};
-      // the actual followup items live in the tool_call input. Forward them so the UI can render cards.
+      if (
+        base.toolName === 'add_message' ||
+        base.toolName === 'set_messages' ||
+        base.toolName === 'set_output' ||
+        base.toolName === 'end_turn' ||
+        base.toolName === 'git_status' ||
+        base.toolName === 'check_job' ||
+        base.toolName === 'check_background_agent' ||
+        base.toolName === 'list_jobs'
+      ) {
+        return { type: 'ignored' }
+      }
       if (base.toolName === 'suggest_followups') {
-        const input = e.input as Record<string, unknown> | undefined
-        const fw = input?.followups
-        if (fw !== undefined) {
+        if (e.input) {
           try {
-            base.message = typeof fw === 'string' ? fw : JSON.stringify(fw)
+            base.message = typeof e.input === 'string' ? e.input : JSON.stringify(e.input)
           } catch {
-            // ignore serialization failure
+            // ignore
           }
         }
+        return base
       }
+      if (base.toolName === 'query_index') base.queryInput = normalizeQueryIndexInput(e.input)
       // Track files this run modifies so the UI can offer "revert changes up to this point".
       const mutated = extractMutationFiles(base.toolName, e.input)
       if (mutated.length > 0) base.files = mutated
@@ -196,11 +205,45 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
       base.toolName = String(e.toolName ?? '')
       base.status = 'running'
       base.agentType = e.agentType ? String(e.agentType) : undefined
+      if (
+        base.toolName === 'add_message' ||
+        base.toolName === 'set_messages' ||
+        base.toolName === 'set_output' ||
+        base.toolName === 'end_turn' ||
+        base.toolName === 'git_status' ||
+        base.toolName === 'check_job' ||
+        base.toolName === 'check_background_agent' ||
+        base.toolName === 'list_jobs' ||
+        base.toolName === 'suggest_followups' ||
+        base.toolName === 'run_file_change_hooks' ||
+        base.toolName === 'run_targeted_validation'
+      ) {
+        return { type: 'ignored' }
+      }
       break
     case 'tool_result': {
       base.toolName = String(e.toolName ?? '')
       base.status = String(e.status ?? 'done')
       base.agentType = e.agentType ? String(e.agentType) : undefined
+      if (
+        base.toolName === 'add_message' ||
+        base.toolName === 'set_messages' ||
+        base.toolName === 'set_output' ||
+        base.toolName === 'end_turn' ||
+        base.toolName === 'git_status' ||
+        base.toolName === 'check_job' ||
+        base.toolName === 'check_background_agent' ||
+        base.toolName === 'list_jobs' ||
+        base.toolName === 'suggest_followups' ||
+        base.toolName === 'run_file_change_hooks' ||
+        base.toolName === 'run_targeted_validation'
+      ) {
+        return { type: 'ignored' }
+      }
+      if (base.toolName === 'spawn_agents' || base.toolName === 'spawn_agent_inline') {
+        base.message = 'Subagents finished'
+        break
+      }
       if (base.toolName === 'query_index') {
         const queryIndex = extractQueryIndexData(e.output)
         if (queryIndex) {
@@ -237,10 +280,18 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
     case 'subagent_start':
       base.agentType = String(e.agentType ?? '')
       base.model = e.model ? String(e.model) : undefined
+      if (e.prompt) base.message = String(e.prompt)
       break
     case 'subagent_finish':
       base.agentType = String(e.agentType ?? '')
       base.status = 'done'
+      if (e.output) {
+        try {
+          base.message = typeof e.output === 'string' ? e.output : JSON.stringify(e.output)
+        } catch {
+          // ignore
+        }
+      }
       break
     case 'start':
       base.agentType = String(e.agentType ?? '')
@@ -268,7 +319,7 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
       base.status = String(e.status ?? '')
       break
     case 'reasoning_delta':
-      base.text = String(e.delta ?? e.chunk ?? '')
+      base.text = String(e.delta ?? e.chunk ?? e.text ?? '')
       break
     case 'provider_status':
       base.message = String(e.status ?? '')

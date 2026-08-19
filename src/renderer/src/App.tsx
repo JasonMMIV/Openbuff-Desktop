@@ -26,9 +26,30 @@ interface UiSettings {
 
 type ChatItem =
   | { kind: 'user'; text: string }
-  | { kind: 'assistant'; text: string }
+  | { kind: 'assistant'; text: string; reasoning?: string }
   | { kind: 'tool'; tool: ToolItem }
   | { kind: 'system'; text: string }
+
+/** Silent background polling / internal tools that should be hidden from the UI timeline */
+function isSilentTool(name?: string): boolean {
+  if (!name) return false
+  const n = name.toLowerCase().trim()
+  return (
+    n === 'git_status' ||
+    n === 'suggest_followups' ||
+    n === 'check_job' ||
+    n === 'check_background_agent' ||
+    n === 'list_jobs' ||
+    n === 'end_turn' ||
+    n === 'add_message' ||
+    n === 'set_messages' ||
+    n === 'set_output' ||
+    n === 'spawn_agents' ||
+    n === 'spawn_agent_inline' ||
+    n === 'run_file_change_hooks' ||
+    n === 'run_targeted_validation'
+  )
+}
 
 const SUGGESTIONS = ['Analyze this project architecture', 'Write tests for this', 'Fix a bug', 'Refactor this code']
 
@@ -113,34 +134,96 @@ function basenameOf(p: string): string {
   return p.split(/[\\/]/).pop() ?? p
 }
 
-/** Extract next-step suggestions from the suggest_followups tool output. */
-function parseFollowups(message: string): string[] {
+export interface FollowupItem {
+  prompt: string
+  label?: string
+}
+
+/** Extract next-step suggestions from the suggest_followups tool output or raw text. */
+function parseFollowups(message: unknown): FollowupItem[] {
   if (!message) return []
-  const out: string[] = []
-  // JSON shapes: [{followups: [...]}], [{suggestions: [...]}], arrays of strings/objects
-  try {
-    const parsed = JSON.parse(message)
-    const collect = (v: unknown): void => {
-      if (typeof v === 'string' && v.trim()) out.push(v.trim())
-      else if (Array.isArray(v)) v.forEach(collect)
-      else if (v && typeof v === 'object') {
-        const rec = v as Record<string, unknown>
-        for (const key of ['followups', 'suggestions', 'items', 'prompts', 'text', 'title', 'prompt']) {
-          if (key in rec) collect(rec[key])
+  const out: FollowupItem[] = []
+
+  const collectItem = (item: unknown): void => {
+    if (!item) return
+    if (typeof item === 'string') {
+      const trimmed = item.trim()
+      if (trimmed.length > 2) {
+        out.push({ prompt: trimmed, label: trimmed })
+      }
+    } else if (typeof item === 'object') {
+      const rec = item as Record<string, unknown>
+      const prompt =
+        typeof rec.prompt === 'string'
+          ? rec.prompt.trim()
+          : typeof rec.text === 'string'
+            ? rec.text.trim()
+            : ''
+      const label =
+        typeof rec.label === 'string'
+          ? rec.label.trim()
+          : typeof rec.title === 'string'
+            ? rec.title.trim()
+            : prompt
+      if (prompt) {
+        out.push({ prompt, label: label || prompt })
+      } else if (Array.isArray(rec.followups)) {
+        rec.followups.forEach(collectItem)
+      } else if (Array.isArray(rec.suggestions)) {
+        rec.suggestions.forEach(collectItem)
+      } else if (Array.isArray(rec.items)) {
+        rec.items.forEach(collectItem)
+      }
+    }
+  }
+
+  if (typeof message === 'object') {
+    if (Array.isArray(message)) {
+      message.forEach(collectItem)
+    } else {
+      collectItem(message)
+    }
+  } else if (typeof message === 'string') {
+    const raw = message.trim()
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw)
+        return parseFollowups(parsed)
+      } catch {
+        const fnMatch =
+          raw.match(/function:suggest_followups\s*(\{[\s\S]*?\})/i) ||
+          raw.match(/<suggest_followups>([\s\S]*?)<\/suggest_followups>/i)
+        if (fnMatch) {
+          try {
+            const parsed = JSON.parse(fnMatch[1])
+            return parseFollowups(parsed)
+          } catch {}
+        }
+      }
+
+      for (const line of raw.split('\n')) {
+        const m = line.match(/^\s*(?:[-*•\d.)]+\s+)?"?([^"]{4,})"?\s*$/)
+        if (m && !/^\s*$/.test(m[1])) {
+          const text = m[1].trim()
+          if (text && !text.toLowerCase().startsWith('function:') && !text.startsWith('{')) {
+            out.push({ prompt: text, label: text })
+          }
         }
       }
     }
-    collect(parsed)
-  } catch {
-    // Not JSON — fall through to line parsing
   }
-  if (out.length === 0) {
-    for (const line of message.split('\n')) {
-      const m = line.match(/^\s*(?:[-*•\d.)]+\s+)?"?([^"]{4,})"?\s*$/)
-      if (m && !/^\s*$/.test(m[1])) out.push(m[1].trim())
+
+  // Deduplicate by prompt
+  const seen = new Set<string>()
+  const deduped: FollowupItem[] = []
+  for (const item of out) {
+    if (!seen.has(item.prompt)) {
+      seen.add(item.prompt)
+      deduped.push(item)
     }
   }
-  return out.slice(0, 6)
+
+  return deduped.slice(0, 6)
 }
 
 /** Derive the current execution stage from recent tool/sub-agent activity. */
@@ -195,7 +278,7 @@ export default function App() {
 
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [followups, setFollowups] = useState<string[]>([])
+  const [followups, setFollowups] = useState<FollowupItem[]>([])
   const [projectMenuOpen, setProjectMenuOpen] = useState(false)
   const [historyTask, setHistoryTask] = useState<{ id: string; prompt: string } | null>(null)
   const [historyResults, setHistoryResults] = useState<SearchResult[]>([])
@@ -208,6 +291,7 @@ export default function App() {
 
   const previousRunRef = useRef<unknown>(null)
   const streamRef = useRef('')
+  const reasoningRef = useRef('')
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const toolIndexRef = useRef(-1)
   const changedFilesRef = useRef<string[]>([])
@@ -358,14 +442,62 @@ export default function App() {
   useEffect(() => {
     if (IS_PREVIEW) return
     const unsubscribe = window.openbuff.onEvent((event) => {
-      if (event.type === 'stream') {
-        streamRef.current += event.text ?? ''
+      if (event.type === 'reasoning_stream' || event.type === 'reasoning_delta') {
+        const delta = event.text ?? ''
+        if (!delta) return
         setChatItems((prev) => {
           const next = [...prev]
           if (next.length > 0 && next[next.length - 1].kind === 'assistant') {
-            next[next.length - 1] = { kind: 'assistant', text: streamRef.current }
+            const last = next[next.length - 1] as { kind: 'assistant'; text: string; reasoning?: string }
+            next[next.length - 1] = { kind: 'assistant', text: last.text, reasoning: (last.reasoning ?? '') + delta }
           } else {
-            next.push({ kind: 'assistant', text: streamRef.current })
+            next.push({ kind: 'assistant', text: '', reasoning: delta })
+          }
+          return next
+        })
+        return
+      }
+
+      if (event.type === 'stream') {
+        const chunk = event.text ?? ''
+        if (!chunk) return
+
+        // Check if stream contains followups
+        const fnMatch =
+          chunk.match(/function:suggest_followups\s*(\{[\s\S]*?\})/i) ||
+          chunk.match(/<suggest_followups>([\s\S]*?)<\/suggest_followups>/i)
+        if (fnMatch) {
+          const parsed = parseFollowups(fnMatch[1])
+          if (parsed.length > 0) {
+            setFollowups(parsed)
+          }
+        }
+
+        setChatItems((prev) => {
+          const next = [...prev]
+          if (next.length > 0 && next[next.length - 1].kind === 'assistant') {
+            const last = next[next.length - 1] as { kind: 'assistant'; text: string; reasoning?: string }
+            const newText = last.text + chunk
+            const fullMatch =
+              newText.match(/function:suggest_followups\s*(\{[\s\S]*?\})/i) ||
+              newText.match(/<suggest_followups>([\s\S]*?)<\/suggest_followups>/i)
+            if (fullMatch) {
+              const parsed = parseFollowups(fullMatch[1])
+              if (parsed.length > 0) {
+                setFollowups(parsed)
+              }
+            }
+            next[next.length - 1] = {
+              kind: 'assistant',
+              text: newText,
+              reasoning: last.reasoning
+            }
+          } else {
+            next.push({
+              kind: 'assistant',
+              text: chunk,
+              reasoning: undefined
+            })
           }
           return next
         })
@@ -373,22 +505,21 @@ export default function App() {
       }
 
       if (event.type === 'tool_start' || event.type === 'tool_call') {
-        // The SDK only surfaces the actual followup items on the tool_call input
-        // (its tool_result just says "Followups suggested!"), so parse here.
+        // The SDK surfaces the followup items on the tool_call input
         if (event.toolName === 'suggest_followups') {
-          const parsed = parseFollowups(event.message ?? '')
+          const parsed = parseFollowups(event.message ?? event.raw ?? '')
           if (parsed.length > 0) setFollowups(parsed)
         }
         // Remember files mutated this run so the Revert button can undo them.
         if (event.files?.length) {
           changedFilesRef.current = [...new Set([...changedFilesRef.current, ...event.files])]
         }
-        if (event.toolName === 'suggest_followups') {
-          // Represented by the clickable followup cards — no separate tool card in the chat.
-          return
-        }
         if (event.toolName === 'query_index' && event.type === 'tool_call') {
           setEvents((prev) => [...prev.slice(-299), event])
+        }
+        // Silent background polling tools (e.g. git_status, suggest_followups, check_job) are hidden from the UI timeline
+        if (isSilentTool(event.toolName)) {
+          return
         }
         const tool: ToolItem = { toolName: event.toolName ?? 'tool', status: 'running', agentType: event.agentType }
         toolIndexRef.current = chatItemsRef.current.length
@@ -397,12 +528,15 @@ export default function App() {
       }
 
       if (event.type === 'tool_result') {
+        if (isSilentTool(event.toolName)) {
+          if (event.toolName === 'suggest_followups') {
+            const parsed = parseFollowups(event.message ?? event.raw ?? '')
+            if (parsed.length > 0) setFollowups(parsed)
+          }
+          return
+        }
         const idx = toolIndexRef.current
         toolIndexRef.current = -1
-        if (event.toolName === 'suggest_followups') {
-          const parsed = parseFollowups(event.message ?? '')
-          if (parsed.length > 0) setFollowups(parsed)
-        }
         if (idx >= 0) {
           setChatItems((prev) => {
             const next = [...prev]
@@ -435,6 +569,68 @@ export default function App() {
 
       if (event.type === 'approval_request') {
         setApprovalRequest({ message: event.message ?? 'Permission requested', raw: event.raw })
+        return
+      }
+
+      if (event.type === 'subagent_start') {
+        const agentType = event.agentType ?? 'subagent'
+        const tool: ToolItem = {
+          toolName: `agent:${agentType}`,
+          status: 'running',
+          agentType: agentType,
+          detail: event.message
+        }
+        setChatItems((prev) => [...prev, { kind: 'tool', tool }])
+        setEvents((prev) => [...prev.slice(-299), event])
+        return
+      }
+
+      if (event.type === 'subagent_stream') {
+        const agentType = event.agentType
+        const text = event.text ?? ''
+        if (text) {
+          setChatItems((prev) => {
+            const next = [...prev]
+            for (let i = next.length - 1; i >= 0; i--) {
+              const item = next[i]
+              if (item.kind === 'tool' && item.tool.agentType === agentType && item.tool.status === 'running') {
+                next[i] = {
+                  kind: 'tool',
+                  tool: {
+                    ...item.tool,
+                    detail: (item.tool.detail ?? '') + text
+                  }
+                }
+                break
+              }
+            }
+            return next
+          })
+        }
+        return
+      }
+
+      if (event.type === 'subagent_finish') {
+        const agentType = event.agentType
+        setChatItems((prev) => {
+          const next = [...prev]
+          for (let i = next.length - 1; i >= 0; i--) {
+            const item = next[i]
+            if (item.kind === 'tool' && item.tool.agentType === agentType && item.tool.status === 'running') {
+              next[i] = {
+                kind: 'tool',
+                tool: {
+                  ...item.tool,
+                  status: 'done',
+                  detail: event.message || item.tool.detail || 'Completed'
+                }
+              }
+              break
+            }
+          }
+          return next
+        })
+        setEvents((prev) => [...prev.slice(-299), event])
         return
       }
 
@@ -482,6 +678,7 @@ export default function App() {
       setChatItems([])
       setEvents([])
       streamRef.current = ''
+      reasoningRef.current = ''
       setNotice(null)
       setAttachments([])
       setTokenUsage(null)
@@ -569,6 +766,7 @@ export default function App() {
       }
       setPrompt('')
       streamRef.current = ''
+      reasoningRef.current = ''
       changedFilesRef.current = []
       setFollowups([])
       setChatItems((prev) => [...prev, { kind: 'user', text }, { kind: 'assistant', text: '' }])
@@ -640,7 +838,11 @@ export default function App() {
           setTimeout(() => {
             if (currentTaskRef.current !== taskId) return
             const messages = chatItemsRef.current.map((item) =>
-              item.kind === 'tool' ? { kind: 'tool', tool: item.tool } : { kind: item.kind, text: item.text }
+              item.kind === 'tool'
+                ? { kind: 'tool', tool: item.tool }
+                : item.kind === 'assistant'
+                ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
+                : { kind: item.kind, text: item.text }
             )
             void window.openbuff.saveTaskTranscript({ taskId, messages })
             void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
@@ -666,6 +868,7 @@ export default function App() {
     setResumeInfo(null)
     setChatItems((prev) => [...prev, { kind: 'assistant', text: '' }])
     streamRef.current = ''
+    reasoningRef.current = ''
     if (IS_PREVIEW) {
       setRunning(false)
       setStopping(false)
@@ -697,7 +900,11 @@ export default function App() {
         setTimeout(() => {
           if (currentTaskRef.current !== taskId) return
           const messages = chatItemsRef.current.map((item) =>
-            item.kind === 'tool' ? { kind: 'tool', tool: item.tool } : { kind: item.kind, text: item.text }
+            item.kind === 'tool'
+              ? { kind: 'tool', tool: item.tool }
+              : item.kind === 'assistant'
+              ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
+              : { kind: item.kind, text: item.text }
           )
           void window.openbuff.saveTaskTranscript({ taskId, messages })
           void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
@@ -717,6 +924,7 @@ export default function App() {
     setChatItems([])
     setEvents([])
     streamRef.current = ''
+    reasoningRef.current = ''
     previousRunRef.current = null
     changedFilesRef.current = []
     setAttachments([])
@@ -763,6 +971,7 @@ export default function App() {
     }
     setEvents([])
     streamRef.current = ''
+    reasoningRef.current = ''
     previousRunRef.current = null
     changedFilesRef.current = []
     setFollowups([])
@@ -1030,6 +1239,7 @@ export default function App() {
       setChatItems([])
       setEvents([])
       streamRef.current = ''
+      reasoningRef.current = ''
       previousRunRef.current = null
       setAttachments([])
       setTokenUsage(null)
@@ -1322,6 +1532,7 @@ export default function App() {
                     <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
                       <AssistantBubble
                         text={item.text}
+                        reasoning={item.reasoning}
                         streaming={isStreaming}
                         onCopy={() => void navigator.clipboard?.writeText(item.text)}
                       />
@@ -1353,8 +1564,14 @@ export default function App() {
                 <div className="followups">
                   <span className="followups-label">Suggested next steps</span>
                   {followups.map((f, i) => (
-                    <button key={i} className="followup-card" disabled={running} onClick={() => setPrompt(f)}>
-                      {f}
+                    <button
+                      key={i}
+                      className="followup-card"
+                      disabled={running}
+                      onClick={() => setPrompt(f.prompt)}
+                      title={f.label && f.label !== f.prompt ? f.prompt : undefined}
+                    >
+                      {f.label || f.prompt}
                     </button>
                   ))}
                 </div>
