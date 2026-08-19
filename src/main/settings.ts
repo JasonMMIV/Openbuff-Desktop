@@ -109,26 +109,44 @@ function migrateLegacyUserData(): void {
   try {
     const currentDir = app.getPath('userData')
     const currentSettings = join(currentDir, SETTINGS_FILE)
-    if (existsSync(currentSettings)) return
 
     const appData = app.getPath('appData')
     const legacyDir = join(appData, 'openbuff-windows')
     const legacySettings = join(legacyDir, SETTINGS_FILE)
     if (!existsSync(legacySettings)) return
 
+    // Check if current settings is missing or essentially empty (no projects and no keys)
+    let shouldMigrateSettings = true
+    if (existsSync(currentSettings)) {
+      try {
+        const currentData = JSON.parse(readFileSync(currentSettings, 'utf-8')) as PersistedSettings
+        const hasKeys = currentData.encryptedKeys && Object.keys(currentData.encryptedKeys).length > 0
+        const hasProjects = Array.isArray(currentData.projects) && currentData.projects.length > 0
+        if (hasKeys || hasProjects) {
+          shouldMigrateSettings = false
+        }
+      } catch {
+        shouldMigrateSettings = true
+      }
+    }
+
     mkdirSync(currentDir, { recursive: true })
-    writeFileSync(currentSettings, readFileSync(legacySettings, 'utf-8'), 'utf-8')
 
-    const legacyOpenbuffJson = join(legacyDir, 'openbuff.json')
-    if (existsSync(legacyOpenbuffJson)) {
-      writeFileSync(join(currentDir, 'openbuff.json'), readFileSync(legacyOpenbuffJson, 'utf-8'), 'utf-8')
+    if (shouldMigrateSettings) {
+      writeFileSync(currentSettings, readFileSync(legacySettings, 'utf-8'), 'utf-8')
+
+      const legacyOpenbuffJson = join(legacyDir, 'openbuff.json')
+      if (existsSync(legacyOpenbuffJson)) {
+        writeFileSync(join(currentDir, 'openbuff.json'), readFileSync(legacyOpenbuffJson, 'utf-8'), 'utf-8')
+      }
+
+      const legacyWindowState = join(legacyDir, 'window-state.json')
+      if (existsSync(legacyWindowState)) {
+        writeFileSync(join(currentDir, 'window-state.json'), readFileSync(legacyWindowState, 'utf-8'), 'utf-8')
+      }
     }
 
-    const legacyWindowState = join(legacyDir, 'window-state.json')
-    if (existsSync(legacyWindowState)) {
-      writeFileSync(join(currentDir, 'window-state.json'), readFileSync(legacyWindowState, 'utf-8'), 'utf-8')
-    }
-
+    // Always copy any missing task transcripts
     const legacyTasksDir = join(legacyDir, 'tasks')
     if (existsSync(legacyTasksDir)) {
       const currentTasksDir = join(currentDir, 'tasks')
@@ -137,8 +155,9 @@ function migrateLegacyUserData(): void {
       for (const f of files) {
         try {
           const src = join(legacyTasksDir, f)
-          if (statSync(src).isFile()) {
-            writeFileSync(join(currentTasksDir, f), readFileSync(src))
+          const dst = join(currentTasksDir, f)
+          if (statSync(src).isFile() && !existsSync(dst)) {
+            writeFileSync(dst, readFileSync(src))
           }
         } catch {
           // ignore single file copy error
