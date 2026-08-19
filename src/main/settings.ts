@@ -1,5 +1,5 @@
 import { app, safeStorage } from 'electron'
-import { existsSync, mkdirSync, promises as fsPromises, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, promises as fsPromises, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 /**
@@ -104,6 +104,52 @@ function settingsPath(): string {
   return join(app.getPath('userData'), SETTINGS_FILE)
 }
 
+/** Automatically migrate settings, keys, and tasks from legacy 'openbuff-windows' directory if present. */
+function migrateLegacyUserData(): void {
+  try {
+    const currentDir = app.getPath('userData')
+    const currentSettings = join(currentDir, SETTINGS_FILE)
+    if (existsSync(currentSettings)) return
+
+    const appData = app.getPath('appData')
+    const legacyDir = join(appData, 'openbuff-windows')
+    const legacySettings = join(legacyDir, SETTINGS_FILE)
+    if (!existsSync(legacySettings)) return
+
+    mkdirSync(currentDir, { recursive: true })
+    writeFileSync(currentSettings, readFileSync(legacySettings, 'utf-8'), 'utf-8')
+
+    const legacyOpenbuffJson = join(legacyDir, 'openbuff.json')
+    if (existsSync(legacyOpenbuffJson)) {
+      writeFileSync(join(currentDir, 'openbuff.json'), readFileSync(legacyOpenbuffJson, 'utf-8'), 'utf-8')
+    }
+
+    const legacyWindowState = join(legacyDir, 'window-state.json')
+    if (existsSync(legacyWindowState)) {
+      writeFileSync(join(currentDir, 'window-state.json'), readFileSync(legacyWindowState, 'utf-8'), 'utf-8')
+    }
+
+    const legacyTasksDir = join(legacyDir, 'tasks')
+    if (existsSync(legacyTasksDir)) {
+      const currentTasksDir = join(currentDir, 'tasks')
+      mkdirSync(currentTasksDir, { recursive: true })
+      const files = readdirSync(legacyTasksDir)
+      for (const f of files) {
+        try {
+          const src = join(legacyTasksDir, f)
+          if (statSync(src).isFile()) {
+            writeFileSync(join(currentTasksDir, f), readFileSync(src))
+          }
+        } catch {
+          // ignore single file copy error
+        }
+      }
+    }
+  } catch {
+    // ignore migration failure
+  }
+}
+
 function defaultSettings(): PersistedSettings {
   return {
     providers: DEFAULT_PROVIDERS.map((p) => ({ ...p, models: [...p.models] })),
@@ -115,6 +161,7 @@ function defaultSettings(): PersistedSettings {
 }
 
 export function loadSettings(): PersistedSettings {
+  migrateLegacyUserData()
   const file = settingsPath()
   if (!existsSync(file)) return defaultSettings()
   try {
