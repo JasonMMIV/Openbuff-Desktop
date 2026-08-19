@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { QueryIndexData, QueryIndexQuery } from '../shared/codebase-index'
 
@@ -52,6 +52,8 @@ const api = {
   fetchModels: (payload: { baseURL: string; apiKey: string; providerType: string }) =>
     ipcRenderer.invoke('openbuff:fetchModels', payload),
   setTheme: (theme: 'dark' | 'light') => ipcRenderer.send('openbuff:setTheme', theme),
+  getZoomFactor: () => webFrame.getZoomFactor(),
+  setZoomFactor: (factor: number) => webFrame.setZoomFactor(factor),
   onEvent: (callback: (event: UiEvent) => void) => {
     const listener = (_e: IpcRendererEvent, event: UiEvent) => callback(event)
     ipcRenderer.on('openbuff:event', listener)

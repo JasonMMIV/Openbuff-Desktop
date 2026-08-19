@@ -185,12 +185,65 @@ export default function App() {
   const projectMenuRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<(HTMLDivElement | null)[]>([])
 
+  const [zoomFactor, setZoomFactor] = useState<number>(() => {
+    const saved = localStorage.getItem('openbuff-zoom-factor')
+    if (saved) {
+      const val = parseFloat(saved)
+      if (Number.isFinite(val) && val >= 0.7 && val <= 2.5) return val
+    }
+    return 1.12
+  })
+
   // Theme switch
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('openbuff-theme', theme)
     if (!IS_PREVIEW) window.openbuff.setTheme(theme)
   }, [theme])
+
+  // Apply zoom factor to Electron webFrame or CSS fallback
+  useEffect(() => {
+    localStorage.setItem('openbuff-zoom-factor', String(zoomFactor))
+    if (!IS_PREVIEW && window.openbuff?.setZoomFactor) {
+      window.openbuff.setZoomFactor(zoomFactor)
+    } else {
+      document.documentElement.style.zoom = String(zoomFactor)
+    }
+  }, [zoomFactor])
+
+  // Global zoom keyboard shortcuts (Ctrl+=, Ctrl+-, Ctrl+0, Ctrl+Wheel)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd') {
+          e.preventDefault()
+          setZoomFactor((z) => Math.min(2.0, parseFloat((z + 0.06).toFixed(2))))
+        } else if (e.key === '-' || e.code === 'NumpadSubtract') {
+          e.preventDefault()
+          setZoomFactor((z) => Math.max(0.75, parseFloat((z - 0.06).toFixed(2))))
+        } else if (e.key === '0' || e.code === 'Numpad0') {
+          e.preventDefault()
+          setZoomFactor(1.12)
+        }
+      }
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        const delta = e.deltaY < 0 ? 0.04 : -0.04
+        setZoomFactor((z) => {
+          const next = parseFloat((z + delta).toFixed(2))
+          return Math.min(2.0, Math.max(0.75, next))
+        })
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('wheel', onWheel, { passive: false })
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('wheel', onWheel)
+    }
+  }, [])
 
   // Close the project selector when clicking elsewhere
   useEffect(() => {

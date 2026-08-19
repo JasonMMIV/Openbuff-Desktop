@@ -133,6 +133,11 @@ function createWindow(): void {
 
   attachWindow(win)
 
+  win.webContents.on('did-finish-load', () => {
+    // Default zoom is 1.12 (standard one-step zoom-in for comfortable reading)
+    win.webContents.setZoomFactor(1.12)
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     void win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
