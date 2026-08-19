@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpIcon, BoltIcon, ChevronDownIcon, GaugeIcon, PaperclipIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
+import { ArrowUpIcon, ChevronDownIcon, GaugeIcon, LightbulbIcon, PaperclipIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
 
 export interface Attachment {
   path: string
@@ -346,7 +346,7 @@ export default function Composer(props: ComposerProps) {
           </div>
 
           <div className="selector">
-            <BoltIcon size={13} />
+            <LightbulbIcon size={13} />
             <select value={reasoningEffort} onChange={(e) => onReasoningChange(e.target.value)} disabled={running} title="Reasoning level">
               {REASONING_OPTIONS.map((r) => (
                 <option key={r} value={r}>
