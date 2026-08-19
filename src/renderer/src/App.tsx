@@ -170,6 +170,7 @@ export default function App() {
   const [branch, setBranch] = useState('')
   const [hasProvider, setHasProvider] = useState(false)
   const [running, setRunning] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [prompt, setPrompt] = useState('')
   const [chatItems, setChatItems] = useState<ChatItem[]>([])
   const [events, setEvents] = useState<UiEvent[]>([])
@@ -598,6 +599,7 @@ export default function App() {
             return next
           })
           setRunning(false)
+          setStopping(false)
         } else {
           streamRef.current = reply.slice(0, i)
           setChatItems((prev) => {
@@ -629,6 +631,7 @@ export default function App() {
       setChatItems((prev) => [...prev, { kind: 'system', text: String(err) }])
     } finally {
       setRunning(false)
+      setStopping(false)
       setApprovalRequest(null)
       // Persist the finished conversation transcript + SDK run state to the task's own files
       if (!IS_PREVIEW) {
@@ -649,6 +652,8 @@ export default function App() {
 
   const stop = useCallback(() => {
     setApprovalRequest(null)
+    setStopping(true)
+    setChatItems((prev) => [...prev, { kind: 'system', text: 'Stop requested. Waiting for agent to safely halt...' }])
     if (!IS_PREVIEW) void window.openbuff.abort()
   }, [])
 
@@ -663,6 +668,7 @@ export default function App() {
     streamRef.current = ''
     if (IS_PREVIEW) {
       setRunning(false)
+      setStopping(false)
       setNotice('Resume is available in the Electron app (preview mode does not persist run state).')
       return
     }
@@ -685,6 +691,7 @@ export default function App() {
       setChatItems((prev) => [...prev, { kind: 'system', text: String(err) }])
     } finally {
       setRunning(false)
+      setStopping(false)
       const taskId = currentTaskRef.current
       if (taskId) {
         setTimeout(() => {
@@ -1410,6 +1417,7 @@ export default function App() {
               onInitRequest={openAgentWizard}
               onSearchRequest={() => setSearchOpen(true)}
               running={running}
+              stopping={stopping}
               disabled={!hasProvider}
               attachments={attachments}
               onAttachFiles={() => void onAttachFiles()}

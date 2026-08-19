@@ -31,6 +31,7 @@ interface ComposerProps {
   onInitRequest: () => void
   onSearchRequest: () => void
   running: boolean
+  stopping?: boolean
   disabled: boolean
   attachments: Attachment[]
   onAttachFiles: () => void
@@ -119,6 +120,7 @@ export default function Composer(props: ComposerProps) {
     onInitRequest,
     onSearchRequest,
     running,
+    stopping,
     disabled,
     attachments,
     onAttachFiles,
@@ -360,7 +362,7 @@ export default function Composer(props: ComposerProps) {
         )}
 
         {running ? (
-          <button className="btn danger send-btn stop-btn" onClick={onStop} title="Stop">
+          <button className={`btn danger send-btn stop-btn ${stopping ? 'stopping' : ''}`} onClick={onStop} disabled={stopping} title={stopping ? "Stopping..." : "Stop"}>
             <StopIcon size={14} />
           </button>
         ) : (
