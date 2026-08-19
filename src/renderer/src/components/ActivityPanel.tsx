@@ -160,10 +160,17 @@ export default function ActivityPanel({ events, cwd, onOpenFile }: Props) {
   }, [events, refreshDiff])
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return events
-    if (filter === 'tools') return events.filter((e) => e.type.startsWith('tool'))
-    if (filter === 'agents') return events.filter((e) => e.type.startsWith('subagent'))
-    return events.filter((e) => e.type === 'error')
+    const isIgnored = (e: UiEvent) =>
+      e.type === 'error' &&
+      typeof e.message === 'string' &&
+      (e.message.includes('suggest_followups already ended') ||
+        e.message.includes('No more non-terminal tools are available after followups'))
+
+    const valid = events.filter((e) => !isIgnored(e))
+    if (filter === 'all') return valid
+    if (filter === 'tools') return valid.filter((e) => e.type.startsWith('tool'))
+    if (filter === 'agents') return valid.filter((e) => e.type.startsWith('subagent'))
+    return valid.filter((e) => e.type === 'error')
   }, [events, filter])
 
   const onAccept = useCallback(

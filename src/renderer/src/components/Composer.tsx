@@ -68,6 +68,47 @@ function formatTokens(n: number): string {
   return String(n)
 }
 
+function TokenRing({ used, max, running }: { used: number; max: number; running: boolean }) {
+  const pct = max > 0 ? Math.min(100, (used / max) * 100) : 0
+  const colorClass = pct >= 90 ? 'tok-danger' : pct >= 70 ? 'tok-warn' : 'tok-normal'
+
+  const size = 15
+  const strokeWidth = 2.2
+  const center = size / 2
+  const radius = center - strokeWidth / 2
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (pct / 100) * circumference
+
+  const title = `Context: ${used.toLocaleString()} / ${max.toLocaleString()} tokens (${pct.toFixed(1)}%)`
+  const text = `${formatTokens(used)}/${formatTokens(max)}`
+
+  return (
+    <div className="token-ring-wrap" title={title}>
+      <svg className={`token-ring-svg${running ? ' pulsing' : ''}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle
+          className="token-ring-bg"
+          cx={center}
+          cy={center}
+          r={radius}
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          className={`token-ring-bar ${colorClass}`}
+          cx={center}
+          cy={center}
+          r={radius}
+          strokeWidth={strokeWidth}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+      </svg>
+      <span className="token-text">{text}</span>
+    </div>
+  )
+}
+
 export default function Composer(props: ComposerProps) {
   const {
     prompt,
@@ -193,9 +234,6 @@ export default function Composer(props: ComposerProps) {
     }
     replaceToken(`/skill:${(skill as SkillInfo).name} `)
   }
-
-  const usagePct = tokenUsage && tokenUsage.max > 0 ? Math.min(100, (tokenUsage.used / tokenUsage.max) * 100) : 0
-  const usageBarClass = usagePct >= 90 ? 'tok-danger' : usagePct >= 70 ? 'tok-warn' : ''
 
   const modelLabel = useMemo(() => {
     const [pid, ...rest] = activeModel.split('/')
@@ -369,20 +407,10 @@ export default function Composer(props: ComposerProps) {
         <div className="toolbar-right">
           {totalCost > 0 && <span className="cost-badge" title="Total cost">${totalCost.toFixed(4)}</span>}
           {tokenUsage && tokenUsage.max > 0 && (
-            <div className="token-bar" title={`Context: ${formatTokens(tokenUsage.used)} / ${formatTokens(tokenUsage.max)} tokens`}>
-              <GaugeIcon size={12} />
-              <div className="token-track">
-                <div className={`token-fill ${usageBarClass}${running ? ' pulsing' : ''}`} style={{ width: `${usagePct}%` }} />
-              </div>
-              <span className="token-text">
-                {formatTokens(tokenUsage.used)}/{formatTokens(tokenUsage.max)}
-              </span>
-            </div>
+            <TokenRing used={tokenUsage.used} max={tokenUsage.max} running={running} />
           )}
         </div>
       </div>
-
-      <div className="composer-hint">Enter to send · Shift+Enter for newline · / for skills · @ for files</div>
     </div>
   )
 }

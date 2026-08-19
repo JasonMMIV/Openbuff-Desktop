@@ -26,6 +26,7 @@ Desktop.ini
 # Local cache & session states
 .freebuff/
 .omx/
+.commandcode/
 *.tmp
 *.temp
 window-state.json

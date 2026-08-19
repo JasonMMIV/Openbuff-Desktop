@@ -439,7 +439,14 @@ export default function App() {
 
       if (event.type === 'error') {
         setApprovalRequest(null)
-        setChatItems((prev) => [...prev, { kind: 'system', text: event.message ?? 'An error occurred' }])
+        const msg = event.message ?? 'An error occurred'
+        if (
+          msg.includes('suggest_followups already ended') ||
+          msg.includes('No more non-terminal tools are available after followups')
+        ) {
+          return
+        }
+        setChatItems((prev) => [...prev, { kind: 'system', text: msg }])
         return
       }
 
@@ -1321,6 +1328,12 @@ export default function App() {
                       <ToolCard tool={item.tool} isLast={isLastTool && running} />
                     </div>
                   )
+                }
+                if (
+                  item.text.includes('suggest_followups already ended') ||
+                  item.text.includes('No more non-terminal tools are available after followups')
+                ) {
+                  return null
                 }
                 return (
                   <div key={i} className="msg-row system" ref={(el) => { msgRefs.current[i] = el }}>

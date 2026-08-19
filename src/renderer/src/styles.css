@@ -1178,7 +1178,7 @@ textarea {
 /* ─── Composer ───────────────────────────────────────── */
 .composer-wrap {
   position: relative;
-  margin: 8px max(24px, calc((100% - 760px) / 2)) 4px;
+  margin: 8px max(24px, calc((100% - 760px) / 2)) 16px;
 }
 
 .attachment-strip {
@@ -1361,60 +1361,67 @@ textarea {
   white-space: nowrap;
 }
 
-.token-bar {
-  display: flex;
+.token-ring-wrap {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--text-2);
   font-size: 12px;
   min-width: 0;
+  cursor: default;
+  user-select: none;
 }
 
-.token-track {
-  width: 110px;
-  height: 5px;
-  background: var(--bg-3);
-  border-radius: 4px;
-  overflow: hidden;
+.token-ring-svg {
+  display: block;
   flex-shrink: 0;
+  overflow: visible;
 }
 
-.token-fill {
-  height: 100%;
-  background: var(--accent);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.token-fill.tok-warn {
-  background: var(--yellow);
-}
-
-.token-fill.tok-danger {
-  background: var(--red);
-}
-
-.token-fill.pulsing {
+.token-ring-svg.pulsing {
   animation: tok-pulse 1.2s ease-in-out infinite;
 }
 
+.token-ring-bg {
+  fill: none;
+  stroke: var(--bg-3);
+}
+
+:root[data-theme='dark'] .token-ring-bg {
+  stroke: rgba(255, 255, 255, 0.15);
+}
+
+:root[data-theme='light'] .token-ring-bg {
+  stroke: rgba(0, 0, 0, 0.12);
+}
+
+.token-ring-bar {
+  fill: none;
+  transition: stroke-dashoffset 0.35s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.2s ease;
+}
+
+.token-ring-bar.tok-normal {
+  stroke: var(--accent);
+}
+
+.token-ring-bar.tok-warn {
+  stroke: var(--yellow);
+}
+
+.token-ring-bar.tok-danger {
+  stroke: var(--red);
+}
+
 @keyframes tok-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.55; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.92); }
 }
 
 .token-text {
   font-family: var(--font-mono);
+  font-size: 11.5px;
   white-space: nowrap;
   color: var(--text-1);
-}
-
-.composer-hint {
-  font-size: 11.5px;
-  color: var(--text-2);
-  margin-top: 3px;
-  padding-left: 2px;
-  user-select: none;
 }
 
 /* mention menu */
@@ -2700,28 +2707,35 @@ textarea {
 /* Follow-up suggestion cards */
 .followups {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   padding: 8px max(24px, calc((100% - 760px) / 2)) 18px;
 }
 
 .followups-label {
+  width: 100%;
   font-size: 11.5px;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+  margin-bottom: 2px;
 }
 
 .followup-card {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
   text-align: left;
   background: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text-0);
-  border-radius: var(--radius-sm);
-  padding: 9px 13px;
-  font-size: 13px;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12.5px;
   cursor: pointer;
-  line-height: 1.5;
+  line-height: 1.4;
   transition: border-color 0.12s, background 0.12s;
 }
 

@@ -253,8 +253,12 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
     case 'error': {
       const msg = String(e.error ?? e.message ?? '')
       // SDK-internal schema validation warnings on streaming chunks (e.g. some OpenAI-compatible
-      // endpoints omit the tool_calls index) — harmless, don't surface to the user
-      if (msg.includes('Type validation failed')) {
+      // endpoints omit the tool_calls index) or followups termination warning — harmless, don't surface to the user
+      if (
+        msg.includes('Type validation failed') ||
+        msg.includes('suggest_followups already ended') ||
+        msg.includes('No more non-terminal tools are available after followups')
+      ) {
         return { type: 'ignored' }
       }
       base.message = msg
