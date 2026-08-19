@@ -378,10 +378,18 @@ export async function runPrompt(
         sendEvent(normalizeEvent(event))
       },
       handleStreamChunk: (chunk) => {
+        // Only the main agent's plain-text chunks belong in the assistant bubble.
+        // Sub-agent / reasoning chunks are forwarded as events so the UI can
+        // choose to render them separately — they must not be appended to the
+        // main assistant message (that caused duplicated/spliced replies).
         if (typeof chunk === 'string') {
           sendEvent({ type: 'stream', text: chunk })
         } else if (chunk && typeof chunk === 'object' && 'chunk' in chunk) {
-          sendEvent({ type: 'stream', text: String(chunk.chunk), agentType: 'agentType' in chunk ? String(chunk.agentType) : undefined })
+          if (chunk.type === 'subagent_chunk') {
+            sendEvent({ type: 'subagent_stream', text: String(chunk.chunk), agentType: chunk.agentType ? String(chunk.agentType) : undefined })
+          } else if (chunk.type === 'reasoning_chunk') {
+            sendEvent({ type: 'reasoning_stream', text: String(chunk.chunk) })
+          }
         }
       },
       runTimeoutMs: 30 * 60 * 1000 // 30-minute safety timeout

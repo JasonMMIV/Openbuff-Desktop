@@ -34,9 +34,18 @@ export function patchBundledAgents<T extends Record<string, any>>(agents: T): T 
         ? [...def.toolNames]
         : []
 
+    // Stop agents from repeatedly calling git_status after learning the directory
+    // is not a git repository — each retry burns tokens and spams the activity feed.
+    // Applies to the prompt-based agents listed above (all base2 variants).
+    let systemPrompt = typeof def.systemPrompt === 'string' ? def.systemPrompt : ''
+    if (systemPrompt && !systemPrompt.includes('not a git repository')) {
+      systemPrompt = `${systemPrompt}\n\n# Git status discipline\n\nIf \`git_status\` reports that the current directory is not a git repository (e.g. \`fatal: not a git repository\`), do not call \`git_status\` again for the rest of this turn. Rely on the runtime-injected Git observation instead.`
+    }
+
     patched[id] = {
       ...def,
       toolNames: fullSurface,
+      systemPrompt: systemPrompt || undefined,
       programmaticConfig: {
         ...(def.programmaticConfig ?? {}),
         progressiveToolDisclosure: false,
