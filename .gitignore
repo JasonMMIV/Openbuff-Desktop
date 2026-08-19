@@ -45,11 +45,6 @@ credentials.json
 token.json
 openbuff.json
 
-# Planning and Assessment documents
-OpenBuff-Windows-App-*.md
-*可行性評估*.md
-*計畫書*.md
-*計劃書*.md
 
 # Test & Verification files
 demo-project/
