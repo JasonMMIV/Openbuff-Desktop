@@ -35,6 +35,35 @@ const SUGGESTIONS = ['Analyze this project architecture', 'Write tests for this'
 // Browser preview mode: renders the full UI with mock data when Electron preload is absent
 const IS_PREVIEW = typeof window.openbuff === 'undefined'
 
+/** Classify a raw failure message into a short reason key (mirrors the main process logic). */
+function classifyRunFailure(rawMessage: string): string {
+  const lower = rawMessage.toLowerCase()
+  if (/abort|aborted|cancelled|canceled/.test(lower) && !/quota|rate/.test(lower)) return 'stopped'
+  if (/quota|rate limit|rate_limit|429/.test(lower)) return 'rate-limit'
+  if (/invalid api key|unauthorized|401|403|authentication|auth/i.test(lower)) return 'auth'
+  if (/timed out|timeout/.test(lower)) return 'timeout'
+  if (/network|fetch failed|socket|econnreset|econnrefused|enotfound|etimedout/i.test(lower)) return 'network'
+  return 'error'
+}
+
+/** Human-readable banner text per failure reason. */
+function resumeBannerText(reason: string | undefined): string {
+  switch (reason) {
+    case 'stopped':
+      return 'This run was stopped — your progress and conversation are preserved.'
+    case 'rate-limit':
+      return 'The model API rate limit or quota was exceeded — your progress and conversation are preserved.'
+    case 'auth':
+      return 'Authentication failed (check your API key) — your progress and conversation are preserved.'
+    case 'timeout':
+      return 'The run timed out — your progress and conversation are preserved.'
+    case 'network':
+      return 'A network error interrupted the run — your progress and conversation are preserved.'
+    default:
+      return 'This run was interrupted — your progress and conversation are preserved.'
+  }
+}
+
 const PREVIEW_SETTINGS: UiSettings = {
   providers: [
     { id: 'openai', label: 'OpenAI API', models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'] },
@@ -172,8 +201,8 @@ export default function App() {
   const [pendingJump, setPendingJump] = useState<{ taskId?: string; index: number } | null>(null)
   const [pendingRevert, setPendingRevert] = useState<{ files: string[]; lastUserIdx: number; lastUserText: string } | null>(null)
   const [focusSignal, setFocusSignal] = useState(0)
-  /** Set when the last run was interrupted (stopped or failed) but its state was preserved. */
-  const [resumeInfo, setResumeInfo] = useState<{ prompt: string } | null>(null)
+  /** Set when the last run failed (stopped, API error, timeout) but its state was preserved. */
+  const [resumeInfo, setResumeInfo] = useState<{ prompt: string; reason?: string; errorMessage?: string } | null>(null)
   const [approvalRequest, setApprovalRequest] = useState<{ message: string; raw?: unknown } | null>(null)
 
   const previousRunRef = useRef<unknown>(null)
@@ -578,14 +607,14 @@ export default function App() {
         cwd,
         prompt: finalPrompt,
         previousRun: previousRunRef.current
-      })) as { ok: boolean; error?: string; runState?: unknown }
+      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean; reason?: string; errorMessage?: string }
       if (!result.ok) {
         setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Execution failed' }])
       } else {
         previousRunRef.current = result.runState
-        // Interrupted (stopped or failed) runs preserve their state; offer to resume.
-        if ((result as { interrupted?: boolean }).interrupted) {
-          setResumeInfo({ prompt: text })
+        // Failed (stopped or API error) runs preserve their state; offer to resume.
+        if (result.interrupted) {
+          setResumeInfo({ prompt: text, reason: result.reason, errorMessage: result.errorMessage })
         }
       }
       void window.openbuff.gitBranch(cwd).then(setBranch)
@@ -637,12 +666,12 @@ export default function App() {
         previousRun: previousRunRef.current,
         resume: true,
         taskId: currentTaskRef.current ?? undefined
-      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean }
+      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean; reason?: string; errorMessage?: string }
       if (!result.ok) {
         setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Resume failed' }])
       } else {
         previousRunRef.current = result.runState
-        if (result.interrupted) setResumeInfo({ prompt: info.prompt })
+        if (result.interrupted) setResumeInfo({ prompt: info.prompt, reason: result.reason, errorMessage: result.errorMessage })
       }
       void window.openbuff.gitBranch(cwd).then(setBranch)
     } catch (err) {
@@ -1016,11 +1045,13 @@ export default function App() {
         ])
         const t = transcript as { ok: boolean; messages?: unknown[] }
         msgs = t.ok ? t.messages ?? [] : []
-        const rs = runStateRes as { ok: boolean; runState?: { output?: { type?: string } } }
+        const rs = runStateRes as { ok: boolean; runState?: { output?: { type?: string; message?: string; error?: string } } }
         previousRunRef.current = rs.ok ? (rs.runState ?? null) : null
         // If the saved run state ended in an error (interrupted/failed), offer to resume it.
         if (rs.ok && rs.runState?.output?.type === 'error') {
-          setResumeInfo({ prompt: task.prompt })
+          const out = rs.runState.output
+          const raw = [out.message, out.error].filter((v): v is string => typeof v === 'string' && v.length > 0).join(' ') || undefined
+          setResumeInfo({ prompt: task.prompt, reason: raw ? classifyRunFailure(raw) : 'error', errorMessage: raw })
         } else {
           setResumeInfo(null)
         }
@@ -1311,10 +1342,15 @@ export default function App() {
             </div>
 
             {resumeInfo && !running && (
-              <div className="resume-banner">
-                <span className="resume-icon">↻</span>
+              <div className={`resume-banner reason-${resumeInfo.reason ?? 'error'}`}>
+                <span className="resume-icon">{resumeInfo.reason === 'rate-limit' ? '⚠' : '↻'}</span>
                 <span className="resume-text">
-                  This run was interrupted — your progress and conversation are preserved.
+                  <span className="resume-text-main">{resumeBannerText(resumeInfo.reason)}</span>
+                  {resumeInfo.errorMessage && (
+                    <span className="resume-text-detail" title={resumeInfo.errorMessage}>
+                      {resumeInfo.errorMessage.length > 220 ? `${resumeInfo.errorMessage.slice(0, 220)}…` : resumeInfo.errorMessage}
+                    </span>
+                  )}
                 </span>
                 <button className="btn primary small" onClick={() => void resumeRun()}>
                   Resume

@@ -392,10 +392,33 @@ function registerIpc(): void {
     })
 
     if (result.error) return { ok: false, error: result.error }
-    // An error-typed output means the run was interrupted (user stop or API failure)
-    // but its state was preserved — the UI can offer to resume from it.
-    const interrupted = result.runState?.output?.type === 'error'
-    return { ok: true, runState: result.runState, interrupted }
+    // An error-typed output means the run ended in failure (user stop, API error,
+    // timeout) but its state was preserved — the UI can offer to resume from it.
+    const output = result.runState?.output
+    const interrupted = output?.type === 'error'
+    if (!interrupted) return { ok: true, runState: result.runState, interrupted }
+
+    const rawMessage = [output.message, output.error]
+      .filter((v): v is string => typeof v === 'string' && v.length > 0)
+      .join(' ') || 'Run failed'
+    // Classify the failure so the UI can show an accurate reason instead of a
+    // generic "interrupted" message (e.g. quota/rate-limit vs user stop).
+    const lower = rawMessage.toLowerCase()
+    let reason: string
+    if (/abort|aborted|cancelled|canceled/.test(lower) && !/quota|rate/.test(lower)) {
+      reason = 'stopped'
+    } else if (/quota|rate limit|rate_limit|429/.test(lower)) {
+      reason = 'rate-limit'
+    } else if (/invalid api key|unauthorized|401|403|authentication|auth/i.test(lower)) {
+      reason = 'auth'
+    } else if (/timed out|timeout/.test(lower)) {
+      reason = 'timeout'
+    } else if (/network|fetch failed|socket|econnreset|econnrefused|enotfound|etimedout/i.test(lower)) {
+      reason = 'network'
+    } else {
+      reason = 'error'
+    }
+    return { ok: true, runState: result.runState, interrupted, reason, errorMessage: rawMessage }
   })
 
   ipcMain.handle('openbuff:abort', () => {
