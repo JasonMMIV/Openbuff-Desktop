@@ -432,24 +432,33 @@ export function listProjects(): ProjectRecord[] {
   return projects
 }
 
-function transcriptPath(taskId: string): string {
+function isValidTaskId(taskId: string): boolean {
+  return typeof taskId === 'string' && /^[a-z0-9_-]+$/i.test(taskId)
+}
+
+function transcriptPath(taskId: string): string | null {
+  if (!isValidTaskId(taskId)) return null
   return join(app.getPath('userData'), 'tasks', `${taskId}.json`)
 }
 
-function runStatePath(taskId: string): string {
+function runStatePath(taskId: string): string | null {
+  if (!isValidTaskId(taskId)) return null
   return join(app.getPath('userData'), 'tasks', `${taskId}.runstate.json`)
 }
 
-function checkpointPath(taskId: string): string {
+function checkpointPath(taskId: string): string | null {
+  if (!isValidTaskId(taskId)) return null
   return join(app.getPath('userData'), 'tasks', `${taskId}.checkpoint.json`)
 }
 
 /** Save a task's full conversation transcript to its own file (unbounded). */
 export function saveTaskTranscript(taskId: string, messages: TaskMessage[]): boolean {
   try {
+    const file = transcriptPath(taskId)
+    if (!file) return false
     const dir = join(app.getPath('userData'), 'tasks')
     mkdirSync(dir, { recursive: true })
-    writeFileSync(transcriptPath(taskId), JSON.stringify(messages), 'utf-8')
+    writeFileSync(file, JSON.stringify(messages), 'utf-8')
     return true
   } catch {
     return false
@@ -459,9 +468,11 @@ export function saveTaskTranscript(taskId: string, messages: TaskMessage[]): boo
 /** Persist the SDK run state so a historical conversation can be resumed with full context. */
 export function saveTaskRunState(taskId: string, runState: unknown): boolean {
   try {
+    const file = runStatePath(taskId)
+    if (!file) return false
     const dir = join(app.getPath('userData'), 'tasks')
     mkdirSync(dir, { recursive: true })
-    writeFileSync(runStatePath(taskId), JSON.stringify(runState), 'utf-8')
+    writeFileSync(file, JSON.stringify(runState), 'utf-8')
     return true
   } catch {
     return false
@@ -472,7 +483,7 @@ export function saveTaskRunState(taskId: string, runState: unknown): boolean {
 export function loadTaskRunState(taskId: string): unknown | null {
   try {
     const file = runStatePath(taskId)
-    if (!existsSync(file)) return null
+    if (!file || !existsSync(file)) return null
     return JSON.parse(readFileSync(file, 'utf-8'))
   } catch {
     return null
@@ -482,14 +493,25 @@ export function loadTaskRunState(taskId: string): unknown | null {
 /** Persist a mid-turn checkpoint (main agent state snapshot) for crash recovery. */
 export function saveTaskCheckpoint(taskId: string, agentState: unknown): boolean {
   try {
+    const file = checkpointPath(taskId)
+    if (!file) return false
     const dir = join(app.getPath('userData'), 'tasks')
     mkdirSync(dir, { recursive: true })
-    // Atomic-ish write: temp file + rename, so an interrupted write never corrupts the checkpoint.
-    const file = checkpointPath(taskId)
+    // Atomic write: temp file + rename, with fallback if Windows briefly locks the file
     const tmp = `${file}.tmp`
     writeFileSync(tmp, JSON.stringify(agentState), 'utf-8')
     rmSync(file, { force: true })
-    renameSync(tmp, file)
+    try {
+      renameSync(tmp, file)
+    } catch {
+      // Fallback copy + remove if renameSync encounters lock contention on Windows
+      try {
+        writeFileSync(file, readFileSync(tmp))
+        rmSync(tmp, { force: true })
+      } catch {
+        return false
+      }
+    }
     return true
   } catch {
     return false
@@ -500,7 +522,7 @@ export function saveTaskCheckpoint(taskId: string, agentState: unknown): boolean
 export function loadTaskCheckpoint(taskId: string): unknown | null {
   try {
     const file = checkpointPath(taskId)
-    if (!existsSync(file)) return null
+    if (!file || !existsSync(file)) return null
     return JSON.parse(readFileSync(file, 'utf-8'))
   } catch {
     return null
@@ -511,7 +533,7 @@ export function loadTaskCheckpoint(taskId: string): unknown | null {
 export function loadTaskTranscript(taskId: string): TaskMessage[] | null {
   try {
     const file = transcriptPath(taskId)
-    if (!existsSync(file)) return null
+    if (!file || !existsSync(file)) return null
     const parsed = JSON.parse(readFileSync(file, 'utf-8'))
     return Array.isArray(parsed) ? (parsed as TaskMessage[]) : null
   } catch {
@@ -521,26 +543,36 @@ export function loadTaskTranscript(taskId: string): TaskMessage[] | null {
 
 /** Remove a task from history along with its transcript and runState files. */
 export function deleteTask(taskId: string): void {
+  if (!isValidTaskId(taskId)) return
   const s = loadSettings()
   s.projects = s.projects ?? []
   for (const p of s.projects) {
     p.tasks = p.tasks.filter((t) => t.id !== taskId)
   }
   saveSettings(s)
-  try {
-    rmSync(transcriptPath(taskId), { force: true })
-  } catch {
-    // ignore
+  const tp = transcriptPath(taskId)
+  if (tp) {
+    try {
+      rmSync(tp, { force: true })
+    } catch {
+      // ignore
+    }
   }
-  try {
-    rmSync(runStatePath(taskId), { force: true })
-  } catch {
-    // ignore
+  const rp = runStatePath(taskId)
+  if (rp) {
+    try {
+      rmSync(rp, { force: true })
+    } catch {
+      // ignore
+    }
   }
-  try {
-    rmSync(checkpointPath(taskId), { force: true })
-  } catch {
-    // ignore
+  const cp = checkpointPath(taskId)
+  if (cp) {
+    try {
+      rmSync(cp, { force: true })
+    } catch {
+      // ignore
+    }
   }
 }
 
@@ -607,7 +639,7 @@ export async function searchHistory(query: string): Promise<HistorySearchResult[
     tasksToSearch.map(async ({ project, task }) => {
       try {
         const file = transcriptPath(task.id)
-        if (!existsSync(file)) return null
+        if (!file || !existsSync(file)) return null
         const content = await fsPromises.readFile(file, 'utf-8')
         const parsed = JSON.parse(content)
         if (!Array.isArray(parsed)) return null

@@ -31,8 +31,32 @@ import { listFiles, listDir, readProjectFile, getGitBranch, getGitDiff, gitAccep
 import { writeFileSync } from 'fs'
 import type { RunState } from '@openbuff/sdk'
 
+// Handle global uncaught errors gracefully to prevent silent crashes
+process.on('uncaughtException', (error) => {
+  console.error('[Main process] Uncaught exception:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Main process] Unhandled rejection:', reason)
+})
+
 if (process.platform === 'win32') {
   app.setAppUserModelId('com.openbuff.desktop')
+}
+
+// Single instance lock to prevent duplicate concurrent processes
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+if (!gotSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length > 0) {
+      const win = windows[0]
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
 }
 
 function windowStateFile(): string {
@@ -45,16 +69,35 @@ function loadWindowState(): { x?: number; y?: number; width: number; height: num
     const raw = readFileSync(windowStateFile(), 'utf-8')
     const parsed = JSON.parse(raw) as { x?: number; y?: number; width?: number; height?: number; maximized?: boolean }
     if (typeof parsed.width !== 'number' || typeof parsed.height !== 'number') return fallback
-    // Guard against the window being saved off-screen (e.g. monitor unplugged)
-    const visible = screen.getAllDisplays().some((d) => {
+
+    const displays = screen.getAllDisplays()
+    let maxWorkAreaWidth = 1280
+    let maxWorkAreaHeight = 820
+    for (const d of displays) {
+      if (d.workArea.width > maxWorkAreaWidth) maxWorkAreaWidth = d.workArea.width
+      if (d.workArea.height > maxWorkAreaHeight) maxWorkAreaHeight = d.workArea.height
+    }
+
+    const clampedWidth = Math.max(960, Math.min(parsed.width, maxWorkAreaWidth))
+    const clampedHeight = Math.max(640, Math.min(parsed.height, maxWorkAreaHeight))
+
+    // Guard against the window being saved off-screen (e.g. monitor unplugged or resized)
+    const visible = displays.some((d) => {
       const b = d.workArea
-      return typeof parsed.x === 'number' && typeof parsed.y === 'number' && parsed.x >= b.x - 100 && parsed.x < b.x + b.width && parsed.y >= b.y - 100 && parsed.y < b.y + b.height
+      return (
+        typeof parsed.x === 'number' &&
+        typeof parsed.y === 'number' &&
+        parsed.x >= b.x - 100 &&
+        parsed.x < b.x + b.width - 100 &&
+        parsed.y >= b.y &&
+        parsed.y < b.y + b.height - 100
+      )
     })
     return {
       x: visible ? parsed.x : undefined,
       y: visible ? parsed.y : undefined,
-      width: parsed.width,
-      height: parsed.height,
+      width: clampedWidth,
+      height: clampedHeight,
       maximized: parsed.maximized
     }
   } catch {
@@ -129,7 +172,20 @@ function createWindow(): void {
   if (saved.maximized) win.maximize()
   win.on('resize', () => saveWindowState(win))
   win.on('move', () => saveWindowState(win))
-  win.on('close', () => saveWindowState(win))
+  win.on('close', () => {
+    if (isRunning()) {
+      abortRun()
+    }
+    saveWindowState(win)
+  })
+
+  // Open external links securely in the system default browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      void import('electron').then(({ shell }) => shell.openExternal(url))
+    }
+    return { action: 'deny' }
+  })
 
   attachWindow(win)
 
@@ -431,6 +487,12 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('before-quit', () => {
+  if (isRunning()) {
+    abortRun()
+  }
 })
 
 app.on('window-all-closed', () => {

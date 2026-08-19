@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { readdirSync, readFileSync, statSync, existsSync, rmSync, type Dirent } from 'fs'
-import { basename, join, relative, sep } from 'path'
+import { basename, join, relative, resolve, sep, isAbsolute } from 'path'
 import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
@@ -100,7 +100,15 @@ export function readProjectFile(path: string): { ok: boolean; content?: string; 
     if (!stat.isFile() || stat.size > 1024 * 1024) {
       return { ok: false, error: 'Not a file or larger than 1MB' }
     }
-    return { ok: true, content: readFileSync(path, 'utf-8') }
+    const buffer = readFileSync(path)
+    // Binary check heuristic: inspect the first 512 bytes for null byte (\x00)
+    const checkLen = Math.min(buffer.length, 512)
+    for (let i = 0; i < checkLen; i++) {
+      if (buffer[i] === 0) {
+        return { ok: false, error: 'Binary file cannot be previewed as text' }
+      }
+    }
+    return { ok: true, content: buffer.toString('utf-8') }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
@@ -136,10 +144,28 @@ export async function getGitDiff(cwd: string): Promise<{ diff: string; files: st
   return { diff: full, files }
 }
 
+function isSafeSubpath(cwd: string, file: string): { safe: boolean; resolvedPath: string; rel: string } {
+  const resolvedCwd = resolve(cwd)
+  const resolvedPath = resolve(cwd, file)
+  const rel = relative(resolvedCwd, resolvedPath)
+  // rel is empty string if resolvedPath === resolvedCwd
+  // rel is absolute if on different drives (Windows)
+  const isInside = rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+  return {
+    safe: isInside,
+    resolvedPath,
+    rel
+  }
+}
+
 /** Stage a single file so its change is "accepted" into the index. */
 export async function gitAcceptFile(cwd: string, file: string): Promise<{ ok: boolean; error?: string }> {
+  const check = isSafeSubpath(cwd, file)
+  if (!check.safe) {
+    return { ok: false, error: 'Invalid file path: path must be inside the project folder' }
+  }
   try {
-    await execFileAsync('git', ['add', '--', file], { cwd })
+    await execFileAsync('git', ['add', '--', check.rel], { cwd })
     return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
@@ -148,18 +174,21 @@ export async function gitAcceptFile(cwd: string, file: string): Promise<{ ok: bo
 
 /** Discard working-tree changes for a single file. */
 export async function gitRevertFile(cwd: string, file: string): Promise<{ ok: boolean; error?: string }> {
+  const check = isSafeSubpath(cwd, file)
+  if (!check.safe) {
+    return { ok: false, error: 'Invalid file path: path must be inside the project folder' }
+  }
   try {
-    await execFileAsync('git', ['checkout', '--', file], { cwd })
+    await execFileAsync('git', ['checkout', '--', check.rel], { cwd })
     return { ok: true }
   } catch (err) {
     // Untracked files (created during the run) can't be checked out — delete them instead.
-    // Verify it really is untracked before removing anything.
+    // Verify it really is untracked and within cwd before removing anything.
     try {
-      await execFileAsync('git', ['ls-files', '--error-unmatch', '--', file], { cwd })
+      await execFileAsync('git', ['ls-files', '--error-unmatch', '--', check.rel], { cwd })
     } catch {
-      const full = join(cwd, file)
-      if (existsSync(full)) {
-        rmSync(full, { force: true })
+      if (existsSync(check.resolvedPath) && check.safe) {
+        rmSync(check.resolvedPath, { force: true })
         return { ok: true }
       }
     }

@@ -17,15 +17,38 @@ const marked = new Marked(
   })
 )
 
-marked.use({ gfm: true, breaks: true })
+marked.use({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    link({ href, title, text }) {
+      const titleAttr = title ? ` title="${title}"` : ''
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer"${titleAttr}>${text}</a>`
+    }
+  }
+})
 
 export function renderMarkdown(text: string): string {
   const raw = marked.parse(text, { async: false }) as string
   // Add a copy affordance to every code block. Uses a div (DOMPurify forbids button)
   // and is part of the HTML string so it survives React re-renders.
   const withCopy = raw.replace(/<pre>/g, '<pre><div class="code-copy" role="button" title="Copy code" aria-label="Copy code">⧉</div>')
-  return DOMPurify.sanitize(withCopy, {
-    ADD_ATTR: ['target'],
+
+  const options = {
+    ADD_ATTR: ['target', 'rel'],
     FORBID_TAGS: ['style', 'form', 'input', 'button']
-  })
+  }
+
+  if (typeof DOMPurify.sanitize === 'function') {
+    return DOMPurify.sanitize(withCopy, options)
+  }
+  if (typeof DOMPurify === 'function') {
+    const purify = (DOMPurify as unknown as (win: unknown) => { sanitize: (s: string, o?: unknown) => string })(
+      typeof window !== 'undefined' ? window : {}
+    )
+    if (typeof purify?.sanitize === 'function') {
+      return purify.sanitize(withCopy, options)
+    }
+  }
+  return withCopy
 }

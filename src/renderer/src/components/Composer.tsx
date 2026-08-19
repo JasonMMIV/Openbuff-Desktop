@@ -224,6 +224,10 @@ export default function Composer(props: ComposerProps) {
           value={prompt}
           onChange={(e) => update(e.target.value, e.target.selectionStart)}
           onKeyDown={(e) => {
+            // Guard against IME composition on Windows/CJK keyboards:
+            // do not submit or trigger actions while user is selecting/confirming IME candidates
+            if (e.nativeEvent.isComposing || e.keyCode === 229) return
+
             if (mention) {
               const list = mentionList
               if (list.length > 0) {

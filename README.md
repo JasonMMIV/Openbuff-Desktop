@@ -29,6 +29,7 @@ npm install        # 依賴（@openbuff/sdk 以本地路徑安裝）
 npm run dev        # 啟動 Electron（dev 模式）
 npm run build      # 產出 out/
 npm run typecheck  # TypeScript 檢查
+npm run test:edge  # 邊界情境與極端案例自動化驗證
 ```
 
 ## 第一次使用
@@ -68,9 +69,13 @@ npm install ./openbuff-src/sdk # 在專案根以本地路徑安裝
 - 🧩 **自訂 agents（`.agents/`）**：從專案或 home 的 `.agents/` 載入 `.ts/.tsx/.js/.mjs/.cjs` agent 定義（`.ts` 以 TypeScript 轉譯），合併進 bundled agents 並可被 base2 spawn；Settings → Custom Agents 顯示載入狀態與驗證錯誤
 - 🪄 **視覺化 `/init` Agent 建立精靈**：從模板建立專案或 home scope 的自訂 agent，編輯 system prompt、工作指令與工具能力，確認 TypeScript 定義後直接寫入 `.agents/<id>.ts`
 - 🔎 **Codebase Index 視覺化**：`query_index` 的查詢模式、索引狀態、涵蓋率、排名分數、命中欄位、symbols/headings、snippets 與關聯檔案會在右側 Codebase Index 面板呈現；可展開結果並點擊開啟檔案
+- 🛡️ **系統健全性與極端防護**：單一實例鎖定（Single Instance Lock）、全域未捕捉錯誤攔截、多螢幕離屏/解析度溢出保護、退出時清理執行中任務
+- ⌨️ **Windows CJK 輸入法優化**：IME 組字選字時防止誤觸送出訊息或誤開 `/` slash 選單
+- 🔒 **檔案系統與安全性加固**：Git Revert/Accept 路徑穿越隔離、Windows DOS 保留名稱阻擋、二進位檔案檢測過濾、大型 Diff（>2,000行）自動截斷保護、Markdown 外部連結 `rel="noopener noreferrer"`
 
 ## 已知限制（PoC）
 
 - codebase index 的背景自動更新/手動重建控制尚未提供；目前會隨 SDK `query_index` 查詢結果更新視覺化面板。
 - API key 以 DPAPI 加密，但 provider 設定（baseURL/model）為明文 JSON。
 - 建立 agent 後，Settings → Custom Agents 可按 Reload 重新掃描 `.agents/`；現有 agent 的進階程式碼編輯仍需直接修改 agent 檔案。
+

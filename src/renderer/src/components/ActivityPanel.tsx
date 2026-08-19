@@ -34,12 +34,15 @@ interface FileDiff {
   removed: number
 }
 
+const MAX_DIFF_LINES_PER_FILE = 2000
+
 /** Parse `git diff --no-color` output into per-file before/after line views. */
 function parseDiff(raw: string): FileDiff[] {
   const files: FileDiff[] = []
   let current: FileDiff | null = null
   let beforeNum = 0
   let afterNum = 0
+  let isTruncated = false
 
   for (const line of raw.split('\n')) {
     if (line.startsWith('diff --git ')) {
@@ -49,9 +52,15 @@ function parseDiff(raw: string): FileDiff[] {
       files.push(current)
       beforeNum = 0
       afterNum = 0
+      isTruncated = false
       continue
     }
     if (!current) continue
+    if (line.startsWith('Binary files ')) {
+      current.before.push({ num: 1, text: '[Binary file differs]', kind: 'ctx' })
+      current.after.push({ num: 1, text: '[Binary file differs]', kind: 'ctx' })
+      continue
+    }
     if (line.startsWith('@@')) {
       const bm = line.match(/^-(\d+)(?:,\d+)?/)
       const am = line.match(/\+(\d+)(?:,\d+)?/)
@@ -61,6 +70,14 @@ function parseDiff(raw: string): FileDiff[] {
     }
     if (line.startsWith('---') || line.startsWith('+++') || line.startsWith('index ')) continue
     if (line === '\\ No newline at end of file') continue
+
+    if (isTruncated) continue
+    if (current.before.length + current.after.length >= MAX_DIFF_LINES_PER_FILE) {
+      isTruncated = true
+      current.before.push({ num: beforeNum, text: '… [Diff truncated for performance]', kind: 'ctx' })
+      current.after.push({ num: afterNum, text: '… [Diff truncated for performance]', kind: 'ctx' })
+      continue
+    }
 
     if (line.startsWith('-')) {
       current.before.push({ num: beforeNum++, text: line.slice(1), kind: 'del' })

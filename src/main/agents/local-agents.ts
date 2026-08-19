@@ -164,11 +164,20 @@ function quote(value: string): string {
   return JSON.stringify(value.trim())
 }
 
+const WINDOWS_RESERVED_NAMES = new Set([
+  'con', 'prn', 'aux', 'nul',
+  'com1', 'com2', 'com3', 'com4', 'com5', 'com6', 'com7', 'com8', 'com9',
+  'lpt1', 'lpt2', 'lpt3', 'lpt4', 'lpt5', 'lpt6', 'lpt7', 'lpt8', 'lpt9'
+])
+
 /** Write the dependency-free TypeScript agent file produced by the /init wizard. */
 export function createLocalAgent(input: CreateLocalAgentInput): CreateLocalAgentResult {
-  const id = input.id.trim()
+  const id = input.id.trim().toLowerCase()
   const idError = id.match(/^[a-z0-9-]+$/) ? null : 'Agent ID must contain only lowercase letters, numbers, and hyphens.'
   if (idError) return { ok: false, error: idError }
+  if (WINDOWS_RESERVED_NAMES.has(id)) {
+    return { ok: false, error: `Agent ID "${id}" is a Windows reserved system name and cannot be used.` }
+  }
   if (!input.displayName.trim()) return { ok: false, error: 'Display name is required.' }
   if (!input.spawnerPrompt.trim()) return { ok: false, error: 'Spawner description is required.' }
   if (!input.systemPrompt.trim()) return { ok: false, error: 'System prompt is required.' }

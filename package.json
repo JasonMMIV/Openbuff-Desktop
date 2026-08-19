@@ -12,6 +12,7 @@
     "start": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "smoke:sdk": "bun run scripts/smoke-sdk.ts",
+    "test:edge": "bun build scripts/verify-edge-cases.ts --outfile=scripts/verify-edge-cases.mjs --target=node --format=esm --external electron --external @openbuff/sdk && npx electron scripts/verify-edge-cases.mjs",
     "test:e2e": "bun build scripts/verify-e2e.ts --outfile=scripts/verify-e2e.mjs --target=node --format=esm --external electron --external @openbuff/sdk && npx electron scripts/verify-e2e.mjs"
   },
   "dependencies": {
