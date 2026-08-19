@@ -28,6 +28,7 @@ interface ComposerProps {
   onSend: () => void
   onStop: () => void
   onNewTask: () => void
+  onInitRequest: () => void
   onSearchRequest: () => void
   running: boolean
   disabled: boolean
@@ -52,6 +53,7 @@ const REASONING_OPTIONS = ['default', 'high', 'medium', 'low', 'minimal', 'none'
 
 const SLASH_COMMANDS: { id: string; label: string; description: string }[] = [
   { id: 'new-task', label: 'new-task', description: 'Start a new task' },
+  { id: 'init', label: 'init', description: 'Create a custom agent visually' },
   { id: 'search', label: 'search', description: 'Search messages and files' }
 ]
 
@@ -73,6 +75,7 @@ export default function Composer(props: ComposerProps) {
     onSend,
     onStop,
     onNewTask,
+    onInitRequest,
     onSearchRequest,
     running,
     disabled,
@@ -184,6 +187,7 @@ export default function Composer(props: ComposerProps) {
       // Built-in command
       replaceToken('')
       if (skill.id === 'new-task') onNewTask()
+      else if (skill.id === 'init') onInitRequest()
       else if (skill.id === 'search') onSearchRequest()
       return
     }

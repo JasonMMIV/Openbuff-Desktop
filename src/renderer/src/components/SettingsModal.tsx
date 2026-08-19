@@ -14,6 +14,7 @@ interface ProviderDraft {
 
 interface Props {
   onClose: () => void
+  onCreateAgent: () => void
   onSaved: (s: { hasProvider: boolean }) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
@@ -50,7 +51,7 @@ function urlError(url: string): string | null {
   }
 }
 
-export default function SettingsModal({ onClose, onSaved, theme, onToggleTheme }: Props) {
+export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, onToggleTheme }: Props) {
   const [providers, setProviders] = useState<ProviderDraft[]>([])
   const [providerHasKey, setProviderHasKey] = useState<Record<string, boolean>>({})
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
@@ -546,10 +547,15 @@ export default function SettingsModal({ onClose, onSaved, theme, onToggleTheme }
 
         <div className="settings-section-head">
           <span>Custom Agents</span>
-          <button className="btn ghost small" onClick={() => void refreshLocalAgents()} disabled={loadingAgents} title="Reload agents from .agents directories">
-            <RefreshIcon size={12} className={loadingAgents ? 'spin-icon' : ''} />
-            {loadingAgents ? 'Loading…' : 'Reload'}
-          </button>
+          <div className="settings-section-actions">
+            <button className="btn primary small" onClick={onCreateAgent} title="Create a custom agent with the /init wizard">
+              <PlusIcon size={12} /> Create Agent
+            </button>
+            <button className="btn ghost small" onClick={() => void refreshLocalAgents()} disabled={loadingAgents} title="Reload agents from .agents directories">
+              <RefreshIcon size={12} className={loadingAgents ? 'spin-icon' : ''} />
+              {loadingAgents ? 'Loading…' : 'Reload'}
+            </button>
+          </div>
         </div>
         <p className="hint">
           Custom agents are loaded from <code>.agents/</code> in your project or home directory (same as the CLI's <code>/init</code>). Files can be <code>.ts</code>, <code>.js</code>, <code>.mjs</code> or <code>.cjs</code> and are merged over the bundled agents.

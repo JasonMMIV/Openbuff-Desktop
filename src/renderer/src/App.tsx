@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Sidebar, { type ProjectRecord, type TaskRecord, type SearchResult } from './components/Sidebar'
 import RightPanel, { type RightTab } from './components/RightPanel'
 import SettingsModal from './components/SettingsModal'
+import AgentWizardModal from './components/AgentWizardModal'
 import Composer, { type Attachment, type SkillInfo } from './components/Composer'
 import { AssistantBubble, ToolCard, UserBubble, type ToolItem } from './components/ChatMessage'
 import {
@@ -155,6 +156,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState<RightTab>('activity')
 
   const [showSettings, setShowSettings] = useState(false)
+  const [showAgentWizard, setShowAgentWizard] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -426,6 +428,15 @@ export default function App() {
     void window.openbuff.listProjects().then((p) => setProjects(p as ProjectRecord[]))
   }, [])
 
+  const openAgentWizard = useCallback(() => {
+    if (!cwd) {
+      setNotice('Select a project folder before creating a custom agent.')
+      return
+    }
+    setShowSettings(false)
+    setShowAgentWizard(true)
+  }, [cwd])
+
   const selectFolder = useCallback(async () => {
     if (IS_PREVIEW) return
     const path = await window.openbuff.selectFolder()
@@ -514,6 +525,11 @@ export default function App() {
     async (textOverride?: string) => {
       const text = (textOverride ?? prompt).trim()
       if (!text || !cwd || running) return
+      if (/^\/init(?:\s|$)/i.test(text)) {
+        setPrompt('')
+        openAgentWizard()
+        return
+      }
       setPrompt('')
       streamRef.current = ''
       changedFilesRef.current = []
@@ -593,7 +609,7 @@ export default function App() {
         }
       }
     }
-  }, [prompt, cwd, running, buildFinalPrompt, refreshProjects])
+  }, [prompt, cwd, running, buildFinalPrompt, refreshProjects, openAgentWizard])
 
   const stop = useCallback(() => {
     setApprovalRequest(null)
@@ -1342,6 +1358,7 @@ export default function App() {
               onSend={() => void send()}
               onStop={stop}
               onNewTask={newTask}
+              onInitRequest={openAgentWizard}
               onSearchRequest={() => setSearchOpen(true)}
               running={running}
               disabled={!hasProvider}
@@ -1378,7 +1395,18 @@ export default function App() {
         />
 
       {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} onSaved={onSettingsSaved} theme={theme} onToggleTheme={toggleTheme} />
+        <SettingsModal onClose={() => setShowSettings(false)} onCreateAgent={openAgentWizard} onSaved={onSettingsSaved} theme={theme} onToggleTheme={toggleTheme} />
+      )}
+
+      {showAgentWizard && cwd && (
+        <AgentWizardModal
+          cwd={cwd}
+          onClose={() => setShowAgentWizard(false)}
+          onCreated={({ id, filePath }) => {
+            setShowAgentWizard(false)
+            setNotice(`Created ${id}. Reload Custom Agents in Settings to use it. (${filePath})`)
+          }}
+        />
       )}
 
       {pendingRevert && (

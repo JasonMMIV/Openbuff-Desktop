@@ -37,6 +37,7 @@ npm run typecheck  # TypeScript 檢查
 2. 點「設定」，選擇 Provider（如 OpenAI）、填入 API Key 與模型，儲存。
 3. 輸入指令，例如：`幫 divide 函數加上除零錯誤處理`。
 4. 右側「Agent 活動」面板即時顯示每一步（子 agent、工具呼叫、結果）。
+5. 在 Composer 輸入 `/init`，或前往 Settings → Custom Agents → Create Agent，使用視覺化精靈建立自訂 agent。
 
 ## 無 GUI 驗證（需要 API key）
 
@@ -65,10 +66,11 @@ npm install ./openbuff-src/sdk # 在專案根以本地路徑安裝
 - 🔀 **Per-agent 模型路由**：Settings → Agent Routing，將特定 agent 指向不同 model / reasoning effort（寫入 openbuff.json 的 `agents` / `agentReasoningEfforts`）
 - ↻ **中斷恢復**：Stop 或 API 失敗後進度保留，聊天區出現 Resume banner 可一鍵續跑；每 ~30s 的 mid-turn checkpoint 原子寫入磁碟供崩潰復原
 - 🧩 **自訂 agents（`.agents/`）**：從專案或 home 的 `.agents/` 載入 `.ts/.tsx/.js/.mjs/.cjs` agent 定義（`.ts` 以 TypeScript 轉譯），合併進 bundled agents 並可被 base2 spawn；Settings → Custom Agents 顯示載入狀態與驗證錯誤
+- 🪄 **視覺化 `/init` Agent 建立精靈**：從模板建立專案或 home scope 的自訂 agent，編輯 system prompt、工作指令與工具能力，確認 TypeScript 定義後直接寫入 `.agents/<id>.ts`
 - 🔎 **Codebase Index 視覺化**：`query_index` 的查詢模式、索引狀態、涵蓋率、排名分數、命中欄位、symbols/headings、snippets 與關聯檔案會在右側 Codebase Index 面板呈現；可展開結果並點擊開啟檔案
 
 ## 已知限制（PoC）
 
 - codebase index 的背景自動更新/手動重建控制尚未提供；目前會隨 SDK `query_index` 查詢結果更新視覺化面板。
 - API key 以 DPAPI 加密，但 provider 設定（baseURL/model）為明文 JSON。
-- 互動式 `/init` wizard（產生 `.agents/` 樣板）尚未實作；直接放入 agent 檔案即可載入。
+- 建立 agent 後，Settings → Custom Agents 可按 Reload 重新掃描 `.agents/`；現有 agent 的進階程式碼編輯仍需直接修改 agent 檔案。

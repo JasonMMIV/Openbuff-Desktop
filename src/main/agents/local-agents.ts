@@ -16,10 +16,11 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'fs'
 import { homedir, tmpdir } from 'os'
-import { extname, join, relative, sep } from 'path'
+import { extname, join, relative, resolve, sep } from 'path'
 // TypeScript 7 (native) has no JS transpile API; use the 5.x JS API for single-file
 // transpilation of user .ts agent files (typechecking still uses `tsc` v7).
 import ts from 'typescript5'
@@ -35,6 +36,24 @@ export interface LocalAgentInfo {
 export interface LocalAgentsResult {
   agents: LocalAgentInfo[]
   validationErrors: { agentId: string; filePath: string; message: string }[]
+}
+
+export interface CreateLocalAgentInput {
+  cwd: string
+  scope: 'project' | 'home'
+  id: string
+  displayName: string
+  spawnerPrompt: string
+  systemPrompt: string
+  instructionsPrompt: string
+  toolNames: string[]
+}
+
+export interface CreateLocalAgentResult {
+  ok: boolean
+  id?: string
+  filePath?: string
+  error?: string
 }
 
 const AGENT_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs'])
@@ -138,5 +157,63 @@ export async function loadProjectLocalAgents(cwd: string): Promise<LocalAgentsRe
     } catch {
       // ignore cleanup failures
     }
+  }
+}
+
+function quote(value: string): string {
+  return JSON.stringify(value.trim())
+}
+
+/** Write the dependency-free TypeScript agent file produced by the /init wizard. */
+export function createLocalAgent(input: CreateLocalAgentInput): CreateLocalAgentResult {
+  const id = input.id.trim()
+  const idError = id.match(/^[a-z0-9-]+$/) ? null : 'Agent ID must contain only lowercase letters, numbers, and hyphens.'
+  if (idError) return { ok: false, error: idError }
+  if (!input.displayName.trim()) return { ok: false, error: 'Display name is required.' }
+  if (!input.spawnerPrompt.trim()) return { ok: false, error: 'Spawner description is required.' }
+  if (!input.systemPrompt.trim()) return { ok: false, error: 'System prompt is required.' }
+  if (!input.instructionsPrompt.trim()) return { ok: false, error: 'Instructions are required.' }
+  try {
+    if (!existsSync(input.cwd) || !statSync(input.cwd).isDirectory()) return { ok: false, error: 'The selected project folder does not exist.' }
+  } catch {
+    return { ok: false, error: 'The selected project folder cannot be accessed.' }
+  }
+
+  const rootResolved = resolve(input.scope === 'home' ? join(homedir(), '.agents') : join(input.cwd, '.agents'))
+  const filePath = resolve(rootResolved, `${id}.ts`)
+  if (!filePath.startsWith(rootResolved + sep)) return { ok: false, error: 'Invalid agent file path.' }
+  if (existsSync(filePath)) return { ok: false, error: `An agent with the ID "${id}" already exists.` }
+
+  const toolNames = [...new Set(input.toolNames.map((tool) => tool.trim()).filter(Boolean))]
+  const source = [
+    'const definition = {',
+    `  id: ${quote(id)},`,
+    `  displayName: ${quote(input.displayName)},`,
+    `  spawnerPrompt: ${quote(input.spawnerPrompt)},`,
+    '  inputSchema: {',
+    '    prompt: {',
+    "      type: 'string',",
+    "      description: 'The focused task this agent should handle.',",
+    '    },',
+    '  },',
+    "  outputMode: 'last_message',",
+    '  includeMessageHistory: false,',
+    `  toolNames: ${JSON.stringify(toolNames)},`,
+    '  mcpServers: {},',
+    '  spawnableAgents: [],',
+    `  systemPrompt: ${quote(input.systemPrompt)},`,
+    `  instructionsPrompt: ${quote(input.instructionsPrompt)},`,
+    '}',
+    '',
+    'export default definition',
+    ''
+  ].join('\n')
+
+  try {
+    mkdirSync(rootResolved, { recursive: true })
+    writeFileSync(filePath, source, 'utf-8')
+    return { ok: true, id, filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
