@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpIcon, BoltIcon, ChevronDownIcon, GaugeIcon, PaperclipIcon, RobotIcon, StopIcon, XIcon } from './Icons'
+import { ArrowUpIcon, BoltIcon, ChevronDownIcon, GaugeIcon, PaperclipIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
 
 export interface Attachment {
   path: string
@@ -331,7 +331,7 @@ export default function Composer(props: ComposerProps) {
           </button>
 
           <div className="selector">
-            <RobotIcon size={13} />
+            <SparklesIcon size={13} />
             <select value={activeModel} onChange={(e) => onModelChange(e.target.value)} disabled={running} title="Model">
               {providers.map((p) =>
                 p.models.map((m) => (
