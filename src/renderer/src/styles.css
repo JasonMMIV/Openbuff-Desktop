@@ -129,7 +129,7 @@ body {
   font-family: var(--font-ui);
   background: var(--bg-0);
   color: var(--text-0);
-  font-size: 15.5px;
+  font-size: 14.5px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -186,7 +186,7 @@ textarea {
   background: none;
   border: none;
   color: var(--text-1);
-  font-size: 14.5px;
+  font-size: 13.5px;
   padding: 8px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -210,7 +210,7 @@ textarea {
   justify-content: space-between;
   padding: 14px 10px 6px;
   color: var(--text-2);
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -239,13 +239,13 @@ textarea {
 
 .nav-muted {
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 12px;
   padding: 4px 10px;
   line-height: 1.5;
 }
 
 .nav-muted.small {
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .project-item {
@@ -260,7 +260,7 @@ textarea {
   border-radius: var(--radius-sm);
   cursor: pointer;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 13px;
   user-select: none;
   white-space: nowrap;
 }
@@ -291,7 +291,7 @@ textarea {
   background: none;
   border: none;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 13px;
   padding: 4px 8px;
   border-radius: 5px;
   cursor: pointer;
@@ -312,7 +312,7 @@ textarea {
 }
 
 .task-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-2);
   flex-shrink: 0;
 }
@@ -337,7 +337,7 @@ textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 7px 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-family: inherit;
 }
 
@@ -363,7 +363,7 @@ textarea {
   background: none;
   border: none;
   color: var(--text-1);
-  font-size: 13.5px;
+  font-size: 12.5px;
   padding: 6px 8px;
   border-radius: 5px;
   cursor: pointer;
@@ -384,7 +384,7 @@ textarea {
 }
 
 .search-kind {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--accent);
   background: var(--accent-soft);
@@ -404,7 +404,7 @@ textarea {
 .search-sub {
   display: flex;
   align-items: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-3, #8b949e);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -449,7 +449,7 @@ textarea {
   gap: 7px;
   padding: 12px 14px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -475,7 +475,7 @@ textarea {
   gap: 6px;
   padding: 4px 12px;
   color: var(--text-1);
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
@@ -503,7 +503,7 @@ textarea {
 
 .tree-count {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-2);
   background: var(--bg-3);
   border-radius: 8px;
@@ -521,7 +521,7 @@ textarea {
 }
 
 .topbar {
-  height: 48px;
+  height: 46px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -559,7 +559,7 @@ textarea {
 
 .project-name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -586,7 +586,7 @@ textarea {
   background: none;
   color: var(--text-0);
   font-family: inherit;
-  font-size: 14.5px;
+  font-size: 14px;
   cursor: pointer;
 }
 
@@ -625,7 +625,7 @@ textarea {
   border-radius: 6px;
   background: none;
   color: var(--text-1);
-  font-size: 13.5px;
+  font-size: 13px;
   font-family: inherit;
   text-align: left;
   cursor: pointer;
@@ -656,7 +656,7 @@ textarea {
 
 .branch-badge {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-1);
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -669,7 +669,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--accent);
   white-space: nowrap;
 }
@@ -697,7 +697,7 @@ textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 6px 12px;
-  font-size: 13.5px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.12s;
 }
@@ -740,7 +740,7 @@ textarea {
 
 .btn.big {
   padding: 10px 22px;
-  font-size: 15px;
+  font-size: 14.5px;
   border-radius: var(--radius);
 }
 
@@ -752,7 +752,7 @@ textarea {
 
 .btn.small {
   padding: 4px 9px;
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .link-btn {
@@ -760,7 +760,7 @@ textarea {
   border: none;
   color: var(--accent);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .link-btn:hover {
@@ -774,7 +774,7 @@ textarea {
   color: var(--green);
   padding: 7px 16px;
   cursor: pointer;
-  font-size: 13.5px;
+  font-size: 13px;
 }
 
 /* ─── Welcome ────────────────────────────────────────── */
@@ -801,19 +801,19 @@ textarea {
 }
 
 .welcome h1 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 650;
 }
 
 .welcome-sub {
   color: var(--text-1);
-  font-size: 15px;
+  font-size: 14px;
   margin-bottom: 8px;
 }
 
 .welcome .hint {
   color: var(--text-2);
-  font-size: 13.5px;
+  font-size: 13px;
   max-width: 520px;
   line-height: 1.7;
 }
@@ -840,7 +840,7 @@ textarea {
 
 .chat-empty .hint {
   color: var(--text-2);
-  font-size: 13.5px;
+  font-size: 13px;
   margin-top: -6px;
 }
 
@@ -858,7 +858,7 @@ textarea {
   color: var(--text-1);
   border-radius: 20px;
   padding: 6px 14px;
-  font-size: 13.5px;
+  font-size: 13px;
   cursor: pointer;
   transition: all 0.12s;
 }
@@ -886,7 +886,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 /* message rows */
@@ -926,9 +926,9 @@ textarea {
   border: 1px solid rgba(110, 155, 255, 0.25);
   color: var(--text-0);
   border-radius: 14px 14px 4px 14px;
-  padding: 10px 16px;
-  font-size: 15.5px;
-  line-height: 1.6;
+  padding: 9px 14px;
+  font-size: 14px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -937,7 +937,7 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 2px 0;
-  font-size: 15.5px;
+  font-size: 14px;
 }
 
 .search-flash {
@@ -951,35 +951,35 @@ textarea {
 
 /* markdown */
 .markdown {
-  font-size: 15.5px;
-  line-height: 1.65;
+  font-size: 14px;
+  line-height: 1.6;
   word-break: break-word;
 }
 
 .markdown > * + * {
-  margin-top: 0.65em;
+  margin-top: 0.6em;
 }
 
 .markdown h1 {
-  font-size: 1.35em;
+  font-size: 1.15em;
   font-weight: 650;
   margin-top: 1.1em;
 }
 
 .markdown h2 {
-  font-size: 1.22em;
+  font-size: 1.1em;
   font-weight: 650;
   margin-top: 1.1em;
 }
 
 .markdown h3 {
-  font-size: 1.12em;
+  font-size: 1.05em;
   font-weight: 650;
   margin-top: 1.1em;
 }
 
 .markdown h4 {
-  font-size: 1.05em;
+  font-size: 1.0em;
   font-weight: 650;
   margin-top: 1.1em;
 }
@@ -990,7 +990,7 @@ textarea {
 }
 
 .markdown li + li {
-  margin-top: 0.28em;
+  margin-top: 0.25em;
 }
 
 .markdown a {
@@ -1004,7 +1004,7 @@ textarea {
 
 .markdown code {
   font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-size: 0.88em;
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1024,7 +1024,7 @@ textarea {
   background: none;
   border: none;
   padding: 0;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--text-0);
 }
@@ -1038,7 +1038,7 @@ textarea {
 .markdown table {
   border-collapse: collapse;
   width: 100%;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .markdown th,
@@ -1100,7 +1100,7 @@ textarea {
   color: var(--red);
   border-radius: var(--radius);
   padding: 8px 14px;
-  font-size: 14px;
+  font-size: 13px;
   max-width: 80%;
 }
 
@@ -1126,7 +1126,7 @@ textarea {
   padding: 4px 6px;
   cursor: pointer;
   user-select: none;
-  font-size: 13.5px;
+  font-size: 13px;
   border-radius: var(--radius-sm);
   transition: background 0.12s;
 }
@@ -1152,12 +1152,12 @@ textarea {
 
 .tool-name {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: var(--text-0);
 }
 
 .tool-agent {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--purple);
   background: rgba(180, 138, 217, 0.12);
   border-radius: 10px;
@@ -1166,7 +1166,7 @@ textarea {
 
 .tool-status-text {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-2);
 }
 
@@ -1195,7 +1195,7 @@ textarea {
   background: var(--accent-soft);
   border: 1px solid rgba(110, 155, 255, 0.3);
   color: var(--text-0);
-  font-size: 12.5px;
+  font-size: 12px;
   border-radius: 12px;
   padding: 3px 8px;
   max-width: 240px;
@@ -1245,7 +1245,7 @@ textarea {
   outline: none;
   color: var(--text-0);
   font-family: inherit;
-  font-size: 15.5px;
+  font-size: 14px;
   line-height: 1.5;
   padding: 2px 0;
   overflow-y: auto;
@@ -1299,7 +1299,7 @@ textarea {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-1);
-  font-size: 13px;
+  font-size: 12px;
   border-radius: var(--radius-sm);
   padding: 4px 9px;
   cursor: pointer;
@@ -1333,7 +1333,7 @@ textarea {
   border: none;
   outline: none;
   color: var(--text-0);
-  font-size: 13px;
+  font-size: 12px;
   font-family: inherit;
   max-width: 180px;
   cursor: pointer;
@@ -1356,7 +1356,7 @@ textarea {
 
 .cost-badge {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--green);
   white-space: nowrap;
 }
@@ -1366,7 +1366,7 @@ textarea {
   align-items: center;
   gap: 6px;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 11.5px;
   min-width: 0;
 }
 
@@ -1410,7 +1410,7 @@ textarea {
 }
 
 .composer-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-2);
   margin-top: 3px;
   padding-left: 2px;
@@ -1441,7 +1441,7 @@ textarea {
   background: none;
   border: none;
   color: var(--text-1);
-  font-size: 13.5px;
+  font-size: 13px;
   padding: 7px 9px;
   border-radius: 6px;
   cursor: pointer;
@@ -1462,7 +1462,7 @@ textarea {
 
 .mention-text {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1470,7 +1470,7 @@ textarea {
 
 .mention-desc {
   margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1481,7 +1481,7 @@ textarea {
 
 .mention-empty {
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 12px;
   padding: 10px;
   text-align: center;
 }
@@ -1509,7 +1509,7 @@ textarea {
   background: none;
   border: none;
   color: var(--text-2);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   padding: 10px 0;
   cursor: pointer;
@@ -1527,7 +1527,7 @@ textarea {
 }
 
 .tab-count {
-  font-size: 11.5px;
+  font-size: 11px;
   background: var(--bg-3);
   border-radius: 10px;
   padding: 0 7px;
@@ -1566,7 +1566,7 @@ textarea {
 
 .file-preview-name {
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--accent);
 }
 
@@ -1575,7 +1575,7 @@ textarea {
   border: none;
   color: var(--text-2);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   padding: 2px 6px;
   border-radius: 4px;
   display: flex;
@@ -1588,7 +1588,7 @@ textarea {
 
 .file-preview-content {
   font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-size: 13px;
   line-height: 1.55;
   padding: 12px 14px;
   overflow: auto;
@@ -1624,7 +1624,7 @@ textarea {
   width: 16px;
   flex-shrink: 0;
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 11.5px;
   text-align: center;
 }
 
@@ -1643,19 +1643,19 @@ textarea {
 }
 
 .timeline-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-1);
 }
 
 .timeline-detail {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-2);
   line-height: 1.4;
   word-break: break-word;
 }
 
 .timeline-meta {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
 }
 
@@ -1679,7 +1679,7 @@ textarea {
 
 .index-title {
   font-weight: 600;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .index-state {
@@ -1688,7 +1688,7 @@ textarea {
   gap: 5px;
   padding: 2px 7px;
   border-radius: 10px;
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: capitalize;
 }
 
@@ -1713,7 +1713,7 @@ textarea {
 
 .index-query-mode {
   color: var(--accent);
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1723,7 +1723,7 @@ textarea {
   margin-top: 4px;
   color: var(--text-0);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 12.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1736,7 +1736,7 @@ textarea {
   gap: 6px 10px;
   margin-top: 7px;
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 10.5px;
 }
 
 .index-summary-grid {
@@ -1763,14 +1763,14 @@ textarea {
 
 .index-summary-card strong {
   color: var(--text-0);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 
 .index-summary-card span {
   margin-top: 2px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .index-status-line {
@@ -1781,7 +1781,7 @@ textarea {
 .index-message {
   margin-top: 8px;
   color: var(--text-2);
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1791,7 +1791,7 @@ textarea {
   border-radius: var(--radius-sm);
   background: var(--yellow-soft);
   color: var(--yellow);
-  font-size: 11.5px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
@@ -1802,13 +1802,13 @@ textarea {
   justify-content: space-between;
   margin: 16px 1px 7px;
   color: var(--text-1);
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
 }
 
 .index-results-head span:last-child {
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 400;
 }
 
@@ -1845,7 +1845,7 @@ textarea {
 .index-rank {
   width: 16px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 10.5px;
   text-align: center;
 }
 
@@ -1855,7 +1855,7 @@ textarea {
   overflow: hidden;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 11.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1863,13 +1863,13 @@ textarea {
 .index-score {
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10.5px;
 }
 
 .index-expand {
   width: 12px;
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 12px;
   text-align: center;
 }
 
@@ -1900,7 +1900,7 @@ textarea {
   border-radius: 4px;
   background: var(--bg-3);
   color: var(--text-2);
-  font-size: 10.5px;
+  font-size: 9.5px;
 }
 
 .index-open-file {
@@ -1910,7 +1910,7 @@ textarea {
   background: none;
   border: none;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
 }
 
@@ -1926,16 +1926,16 @@ textarea {
   padding: 8px 8px 10px 30px;
   border-top: 1px solid var(--border);
   color: var(--text-1);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
 }
 
 .index-result-details p { color: var(--text-2); }
 .index-result-details > div { display: flex; flex-direction: column; gap: 3px; }
-.index-detail-label { color: var(--text-2); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.index-detail-label { color: var(--text-2); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 
 .index-related-list { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
-.index-related { max-width: 100%; overflow: hidden; padding: 2px 4px; color: var(--accent); background: none; border: none; border-radius: 4px; font-family: var(--font-mono); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.index-related { max-width: 100%; overflow: hidden; padding: 2px 4px; color: var(--accent); background: none; border: none; border-radius: 4px; font-family: var(--font-mono); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 
 .index-diagnostics {
   display: flex;
@@ -1946,7 +1946,7 @@ textarea {
   background: var(--yellow-soft);
   border-radius: var(--radius-sm);
   color: var(--yellow);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
@@ -1969,7 +1969,7 @@ textarea {
 }
 
 .modal {
-  width: 540px;
+  width: 520px;
   max-height: 88vh;
   overflow-y: auto;
   background: var(--bg-2);
@@ -1983,12 +1983,12 @@ textarea {
 }
 
 .modal h2 {
-  font-size: 18px;
+  font-size: 16.5px;
   margin-bottom: 2px;
 }
 
 .modal label {
-  font-size: 13.5px;
+  font-size: 12.5px;
   color: var(--text-1);
   margin-top: 6px;
 }
@@ -2000,7 +2000,7 @@ textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 9px 11px;
-  font-size: 14px;
+  font-size: 13.5px;
   font-family: inherit;
   transition: border-color 0.12s;
   width: 100%;
@@ -2014,13 +2014,13 @@ textarea {
 }
 
 .modal .hint {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-2);
   line-height: 1.6;
 }
 
 .hint-inline {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-2);
 }
 
@@ -2029,7 +2029,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   margin-top: 10px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 650;
   color: var(--text-0);
 }
@@ -2064,14 +2064,14 @@ textarea {
   min-width: 0;
   font-weight: 600;
   padding: 6px 9px !important;
-  font-size: 13.5px !important;
+  font-size: 13px !important;
 }
 
 .provider-card-title select {
   width: auto;
   flex-shrink: 0;
   padding: 6px 9px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .model-picker-row {
@@ -2106,7 +2106,7 @@ textarea {
   border: 1px solid var(--border);
   color: var(--text-1);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 11.5px;
   border-radius: 12px;
   padding: 3px 8px;
 }
@@ -2119,7 +2119,7 @@ textarea {
 
 .model-add-row input {
   padding: 6px 9px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 /* Agent routing */
@@ -2132,7 +2132,7 @@ textarea {
 
 .route-agent {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--accent);
   background: var(--accent-soft);
   border-radius: 5px;
@@ -2148,7 +2148,7 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .route-row .mini-btn {
@@ -2170,7 +2170,7 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 5px 8px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 
 .route-add-row .btn {
@@ -2196,7 +2196,7 @@ textarea {
 }
 
 .local-agent-name {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2217,13 +2217,13 @@ textarea {
   margin-top: 8px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--text-0);
 }
 
 .error {
   color: var(--red);
-  font-size: 13px;
+  font-size: 12.5px;
   background: var(--red-soft);
   border: 1px solid rgba(239, 106, 106, 0.35);
   border-radius: var(--radius-sm);
@@ -2256,7 +2256,7 @@ textarea {
 
 .revert-file {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-1);
   word-break: break-all;
 }
@@ -2297,7 +2297,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--accent);
   background: var(--accent-soft);
   border-radius: 20px;
@@ -2381,20 +2381,20 @@ textarea {
 }
 
 .web-title {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--accent);
   word-break: break-word;
 }
 
 .web-snippet {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--text-1);
   line-height: 1.5;
 }
 
 .web-url {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
   word-break: break-all;
 }
@@ -2405,7 +2405,7 @@ textarea {
 
 .tool-detail {
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 11.5px;
   line-height: 1.55;
   color: var(--text-1);
   white-space: pre-wrap;
@@ -2428,7 +2428,7 @@ textarea {
 }
 
 .followups-label {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -2441,7 +2441,7 @@ textarea {
   color: var(--text-0);
   border-radius: var(--radius-sm);
   padding: 9px 13px;
-  font-size: 13.5px;
+  font-size: 13px;
   cursor: pointer;
   line-height: 1.5;
   transition: border-color 0.12s, background 0.12s;
@@ -2477,7 +2477,7 @@ textarea {
 
 .resume-text {
   flex: 1;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-1);
   line-height: 1.45;
   min-width: 0;
@@ -2499,7 +2499,7 @@ textarea {
   background: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text-2);
-  font-size: 12px;
+  font-size: 11.5px;
   border-radius: 14px;
   padding: 3px 11px;
   cursor: pointer;
@@ -2524,7 +2524,7 @@ textarea {
 }
 
 .diff-notice {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--green);
   background: var(--green-soft);
   border-radius: var(--radius-sm);
@@ -2555,7 +2555,7 @@ textarea {
   padding: 4px 9px;
   cursor: pointer;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 12px;
 }
 
 .diff-file-row:hover {
@@ -2578,7 +2578,7 @@ textarea {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
-  font-size: 11.5px;
+  font-size: 11px;
 }
 
 .stat-add {
@@ -2597,7 +2597,7 @@ textarea {
 
 .btn.mini {
   padding: 4px 12px;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .btn.danger {
@@ -2615,7 +2615,7 @@ textarea {
   grid-template-columns: 1fr 1fr;
   gap: 6px;
   font-family: var(--font-mono);
-  font-size: 12.5px;
+  font-size: 11.5px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -2634,7 +2634,7 @@ textarea {
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
   padding: 4px 10px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -2700,7 +2700,7 @@ textarea {
   border: none;
   outline: none;
   color: var(--text-0);
-  font-size: 13px;
+  font-size: 12.5px;
   padding: 2px 0;
 }
 
