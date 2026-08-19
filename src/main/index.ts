@@ -14,6 +14,8 @@ import {
   listProjects,
   saveProjectTask,
   deleteTask,
+  renameTask,
+  removeProject,
   saveTaskTranscript,
   loadTaskTranscript,
   saveTaskRunState,
@@ -344,6 +346,20 @@ function registerIpc(): void {
     if (!taskId) return { ok: false, error: 'Missing taskId' }
     deleteTask(taskId)
     return { ok: true }
+  })
+
+  ipcMain.handle('openbuff:renameTask', (_e, payload: { taskId: string; newPrompt: string }) => {
+    if (!payload || typeof payload.taskId !== 'string' || typeof payload.newPrompt !== 'string') {
+      return { ok: false, error: 'Invalid payload' }
+    }
+    const ok = renameTask(payload.taskId, payload.newPrompt)
+    return { ok }
+  })
+
+  ipcMain.handle('openbuff:removeProject', (_e, projectPath: string) => {
+    if (!projectPath) return { ok: false, error: 'Missing projectPath' }
+    const ok = removeProject(projectPath)
+    return { ok }
   })
 
   ipcMain.handle('openbuff:saveTaskTranscript', (_e, payload: { taskId: string; messages: TaskMessage[] }) => {

@@ -576,6 +576,26 @@ export function deleteTask(taskId: string): void {
   }
 }
 
+/** Rename a task's prompt in history. */
+export function renameTask(taskId: string, newPrompt: string): boolean {
+  if (!isValidTaskId(taskId) || !newPrompt.trim()) return false
+  const s = loadSettings()
+  s.projects = s.projects ?? []
+  let found = false
+  for (const p of s.projects) {
+    const t = p.tasks.find((task) => task.id === taskId)
+    if (t) {
+      t.prompt = newPrompt.trim()
+      found = true
+      break
+    }
+  }
+  if (found) {
+    saveSettings(s)
+  }
+  return found
+}
+
 export function saveProjectTask(cwd: string, prompt: string): TaskRecord {
   const s = loadSettings()
   s.projects = s.projects ?? []
@@ -605,6 +625,22 @@ export function touchProject(cwd: string): void {
     s.projects.unshift(existing)
     saveSettings(s)
   }
+}
+
+/** Remove a project and all its task files from history. */
+export function removeProject(projectPath: string): boolean {
+  if (!projectPath) return false
+  const s = loadSettings()
+  s.projects = s.projects ?? []
+  const target = s.projects.find((p) => p.path === projectPath)
+  if (!target) return false
+  for (const t of target.tasks ?? []) {
+    deleteTask(t.id)
+  }
+  const s2 = loadSettings()
+  s2.projects = (s2.projects ?? []).filter((p) => p.path !== projectPath)
+  saveSettings(s2)
+  return true
 }
 
 export interface HistorySearchResult {

@@ -31,6 +31,9 @@ const api = {
   listProjects: () => ipcRenderer.invoke('openbuff:listProjects'),
   saveTask: (payload: { cwd: string; prompt: string }) => ipcRenderer.invoke('openbuff:saveTask', payload),
   deleteTask: (taskId: string) => ipcRenderer.invoke('openbuff:deleteTask', taskId),
+  renameTask: (payload: { taskId: string; newPrompt: string }) =>
+    ipcRenderer.invoke('openbuff:renameTask', payload),
+  removeProject: (projectPath: string) => ipcRenderer.invoke('openbuff:removeProject', projectPath),
   saveTaskTranscript: (payload: { taskId: string; messages: unknown[] }) =>
     ipcRenderer.invoke('openbuff:saveTaskTranscript', payload),
   loadTaskTranscript: (taskId: string) => ipcRenderer.invoke('openbuff:loadTaskTranscript', taskId),

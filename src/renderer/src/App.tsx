@@ -51,7 +51,8 @@ function isSilentTool(name?: string): boolean {
   )
 }
 
-const SUGGESTIONS = ['Analyze this project architecture', 'Write tests for this', 'Fix a bug', 'Refactor this code']
+const DEFAULT_PROMPT_HEIGHT = 44
+const MAX_PROMPT_HEIGHT = 160
 
 // Browser preview mode: renders the full UI with mock data when Electron preload is absent
 const IS_PREVIEW = typeof window.openbuff === 'undefined'
@@ -1287,6 +1288,63 @@ export default function App() {
     [onOpenProject]
   )
 
+  const onRenameTask = useCallback(
+    async (project: ProjectRecord, task: TaskRecord, newPrompt: string) => {
+      if (!newPrompt || newPrompt === task.prompt) return
+      if (!IS_PREVIEW) {
+        await window.openbuff.renameTask({ taskId: task.id, newPrompt })
+      }
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.path !== project.path) return p
+          return {
+            ...p,
+            tasks: p.tasks.map((t) => (t.id === task.id ? { ...t, prompt: newPrompt } : t))
+          }
+        })
+      )
+      if (historyTask?.id === task.id) {
+        setHistoryTask((prev) => (prev ? { ...prev, prompt: newPrompt } : null))
+      }
+    },
+    [historyTask]
+  )
+
+  const onDeleteTask = useCallback(
+    async (project: ProjectRecord, task: TaskRecord) => {
+      if (!IS_PREVIEW) {
+        await window.openbuff.deleteTask(task.id)
+      }
+      setProjects((prev) =>
+        prev.map((p) => {
+          if (p.path !== project.path) return p
+          return {
+            ...p,
+            tasks: p.tasks.filter((t) => t.id !== task.id)
+          }
+        })
+      )
+      if (historyTask?.id === task.id || currentTaskRef.current === task.id) {
+        newTask()
+      }
+    },
+    [historyTask, newTask]
+  )
+
+  const onRemoveProject = useCallback(
+    async (project: ProjectRecord) => {
+      if (!IS_PREVIEW) {
+        await window.openbuff.removeProject(project.path)
+      }
+      setProjects((prev) => prev.filter((p) => p.path !== project.path))
+      const isCurrentProjectTask = historyTask && project.tasks.some((t) => t.id === historyTask.id)
+      if (isCurrentProjectTask || (cwd === project.path && !running)) {
+        newTask()
+      }
+    },
+    [cwd, historyTask, newTask, running]
+  )
+
   const onSearchJump = useCallback(
     async (r: SearchResult) => {
       if (r.index < 0) {
@@ -1374,6 +1432,9 @@ export default function App() {
           onNewProject={() => void selectFolder()}
           onOpenProject={(p) => void onOpenProject(p)}
           onOpenTask={(p, t) => void onOpenTask(p, t)}
+          onRenameTask={onRenameTask}
+          onDeleteTask={onDeleteTask}
+          onRemoveProject={onRemoveProject}
           onSettings={() => setShowSettings(true)}
           currentProjectPath={cwd}
         />
@@ -1495,21 +1556,11 @@ export default function App() {
               )}
 
               {chatItems.length === 0 && !historyTask && (
-                <div className="chat-empty">
-                  <p>Type a command and OpenBuff will analyze your code and make changes.</p>
-                  <p className="hint">Type / for skills, @ for files.</p>
-                  <div className="suggestions">
-                    {SUGGESTIONS.map((s) => (
-                      <button
-                        key={s}
-                        className="suggestion-chip"
-                        disabled={running || !hasProvider}
-                        onClick={() => setPrompt(s)}
-                      >
-                        {s}
-                      </button>
-                    ))}
+                <div className="welcome chat-welcome">
+                  <div className="welcome-logo">
+                    <AppIcon size={72} />
                   </div>
+                  <h1>What are we building today?</h1>
                 </div>
               )}
 

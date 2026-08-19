@@ -1,5 +1,14 @@
-import { useState } from 'react'
-import { FolderIcon, FolderOpenIcon, FolderPlusIcon, NotePenIcon, SearchIcon, SettingsIcon } from './Icons'
+import { useState, useEffect, useRef } from 'react'
+import {
+  EditIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  NotePenIcon,
+  SearchIcon,
+  SettingsIcon,
+  TrashIcon
+} from './Icons'
 
 export interface SearchResult {
   index: number
@@ -39,6 +48,9 @@ interface SidebarProps {
   onNewProject: () => void
   onOpenProject: (path: string) => void
   onOpenTask: (project: ProjectRecord, task: TaskRecord) => void
+  onRenameTask?: (project: ProjectRecord, task: TaskRecord, newPrompt: string) => void
+  onDeleteTask?: (project: ProjectRecord, task: TaskRecord) => void
+  onRemoveProject?: (project: ProjectRecord) => void
   onSettings: () => void
   currentProjectPath: string | null
 }
@@ -55,8 +67,54 @@ function timeAgo(ts: number): string {
   return new Date(ts).toLocaleDateString()
 }
 
+interface ContextMenuState {
+  x: number
+  y: number
+  project: ProjectRecord
+  task: TaskRecord
+}
+
+interface ProjectContextMenuState {
+  x: number
+  y: number
+  project: ProjectRecord
+}
+
 export default function Sidebar(props: SidebarProps) {
   const [expandedProject, setExpandedProject] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
+  const [projectContextMenu, setProjectContextMenu] = useState<ProjectContextMenuState | null>(null)
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null)
+  const [editingText, setEditingText] = useState('')
+  const [confirmDeleteTask, setConfirmDeleteTask] = useState<{ project: ProjectRecord; task: TaskRecord } | null>(null)
+  const [confirmRemoveProject, setConfirmRemoveProject] = useState<ProjectRecord | null>(null)
+
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const projectContextMenuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!contextMenu && !projectContextMenu) return
+    const dismiss = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (contextMenuRef.current?.contains(target) || projectContextMenuRef.current?.contains(target)) {
+        return
+      }
+      setContextMenu(null)
+      setProjectContextMenu(null)
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setContextMenu(null)
+        setProjectContextMenu(null)
+      }
+    }
+    window.addEventListener('pointerdown', dismiss)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', dismiss)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [contextMenu, projectContextMenu])
 
   return (
     <aside className={`sidebar ${props.open ? 'open' : 'closed'}`}>
@@ -133,6 +191,15 @@ export default function Sidebar(props: SidebarProps) {
                     props.onOpenProject(p.path)
                   }
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  const menuWidth = 130
+                  const menuHeight = 44
+                  const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+                  const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+                  setProjectContextMenu({ x, y, project: p })
+                }}
                 title={p.path}
               >
                 {isOpen ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
@@ -141,12 +208,58 @@ export default function Sidebar(props: SidebarProps) {
               {isOpen && (
                 <div className="task-list">
                   {p.tasks.length === 0 && <div className="nav-muted small">No tasks</div>}
-                  {p.tasks.slice(0, 20).map((t) => (
-                    <button key={t.id} className="task-row" onClick={() => props.onOpenTask(p, t)} title={t.prompt}>
-                      <span className="task-text">{t.prompt}</span>
-                      <span className="task-time">{timeAgo(t.createdAt)}</span>
-                    </button>
-                  ))}
+                  {p.tasks.slice(0, 20).map((t) =>
+                    editingTaskId === t.id ? (
+                      <div key={t.id} className="task-row editing" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          className="task-rename-input"
+                          value={editingText}
+                          autoFocus
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              const trimmed = editingText.trim()
+                              if (trimmed && trimmed !== t.prompt) {
+                                props.onRenameTask?.(p, t, trimmed)
+                              }
+                              setEditingTaskId(null)
+                            } else if (e.key === 'Escape') {
+                              e.preventDefault()
+                              setEditingTaskId(null)
+                            }
+                          }}
+                          onBlur={() => {
+                            const trimmed = editingText.trim()
+                            if (trimmed && trimmed !== t.prompt) {
+                              props.onRenameTask?.(p, t, trimmed)
+                            }
+                            setEditingTaskId(null)
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        key={t.id}
+                        className="task-row"
+                        onClick={() => props.onOpenTask(p, t)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          const menuWidth = 130
+                          const menuHeight = 74
+                          const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+                          const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+                          setContextMenu({ x, y, project: p, task: t })
+                        }}
+                        title={t.prompt}
+                      >
+                        <span className="task-text">{t.prompt}</span>
+                        <span className="task-time">{timeAgo(t.createdAt)}</span>
+                      </button>
+                    )
+                  )}
                 </div>
               )}
             </div>
@@ -160,6 +273,126 @@ export default function Sidebar(props: SidebarProps) {
           <span>Settings</span>
         </button>
       </div>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="task-context-menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            className="context-menu-item"
+            onClick={(e) => {
+              e.stopPropagation()
+              const { task } = contextMenu
+              setContextMenu(null)
+              setEditingTaskId(task.id)
+              setEditingText(task.prompt)
+            }}
+          >
+            <EditIcon size={14} />
+            <span>Rename</span>
+          </button>
+          <button
+            type="button"
+            className="context-menu-item danger"
+            onClick={(e) => {
+              e.stopPropagation()
+              const { project, task } = contextMenu
+              setContextMenu(null)
+              setConfirmDeleteTask({ project, task })
+            }}
+          >
+            <TrashIcon size={14} />
+            <span>Delete</span>
+          </button>
+        </div>
+      )}
+
+      {projectContextMenu && (
+        <div
+          ref={projectContextMenuRef}
+          className="task-context-menu"
+          style={{ left: projectContextMenu.x, top: projectContextMenu.y }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            type="button"
+            className="context-menu-item danger"
+            onClick={(e) => {
+              e.stopPropagation()
+              const target = projectContextMenu.project
+              setProjectContextMenu(null)
+              setConfirmRemoveProject(target)
+            }}
+          >
+            <TrashIcon size={14} />
+            <span>Remove</span>
+          </button>
+        </div>
+      )}
+
+      {confirmDeleteTask && (
+        <div className="modal-backdrop" onClick={() => setConfirmDeleteTask(null)}>
+          <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Delete conversation?</h2>
+            <p className="hint">
+              Are you sure you want to delete &ldquo;{confirmDeleteTask.task.prompt}&rdquo;? This will permanently remove this conversation.
+            </p>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setConfirmDeleteTask(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn danger"
+                autoFocus
+                onClick={() => {
+                  const target = confirmDeleteTask
+                  setConfirmDeleteTask(null)
+                  props.onDeleteTask?.(target.project, target.task)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmRemoveProject && (
+        <div className="modal-backdrop" onClick={() => setConfirmRemoveProject(null)}>
+          <div className="modal confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Remove project?</h2>
+            <p className="hint">
+              Remove &ldquo;{confirmRemoveProject.name}&rdquo; from project history?
+            </p>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setConfirmRemoveProject(null)}>
+                Cancel
+              </button>
+              <button
+                className="btn danger"
+                autoFocus
+                onClick={() => {
+                  const target = confirmRemoveProject
+                  setConfirmRemoveProject(null)
+                  props.onRemoveProject?.(target)
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

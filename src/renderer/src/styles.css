@@ -307,6 +307,23 @@ textarea {
   color: var(--text-0);
 }
 
+.task-row.editing {
+  padding: 2px 4px;
+}
+
+.task-rename-input {
+  width: 100%;
+  background: var(--bg-2);
+  color: var(--text-0);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .task-text {
   flex: 1;
   overflow: hidden;
@@ -318,6 +335,63 @@ textarea {
   font-size: 11.5px;
   color: var(--text-2);
   flex-shrink: 0;
+}
+
+/* Context Menu */
+.task-context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 130px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 16px var(--shadow), 0 1px 3px rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  animation: menu-fade-in 0.08s ease-out;
+}
+
+@keyframes menu-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-0);
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-0);
+}
+
+.context-menu-item.danger {
+  color: var(--red);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--red-soft);
+  color: var(--red);
 }
 
 .sidebar-bottom {
@@ -819,6 +893,11 @@ textarea {
   font-size: 13px;
   max-width: 520px;
   line-height: 1.7;
+}
+
+.chat-welcome {
+  margin: auto 0;
+  padding: 40px 20px;
 }
 
 /* ─── Chat ───────────────────────────────────────────── */
@@ -2642,6 +2721,19 @@ textarea {
 
 .revert-file.more {
   color: var(--text-2);
+}
+
+/* Confirm modal */
+.confirm-modal {
+  width: 440px;
+  max-width: 90vw;
+  gap: 12px;
+}
+
+.confirm-modal .hint {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-1);
 }
 
 /* ─── Scrollbar ──────────────────────────────────────── */
