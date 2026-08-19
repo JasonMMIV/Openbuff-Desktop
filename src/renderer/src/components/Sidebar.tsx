@@ -60,7 +60,7 @@ export default function Sidebar(props: SidebarProps) {
 
   return (
     <aside className={`sidebar ${props.open ? 'open' : 'closed'}`}>
-      <div className="sidebar-nav">
+      <div className="sidebar-top">
         <button className="nav-item" onClick={props.onNewTask} title="New task">
           <NotePenIcon size={15} />
           <span>New Task</span>
@@ -115,43 +115,43 @@ export default function Sidebar(props: SidebarProps) {
             <FolderPlusIcon size={15} />
           </button>
         </div>
+      </div>
 
-        <div className="projects-list">
-          {props.projects.length === 0 && <div className="nav-muted">No projects yet. Open a folder to start.</div>}
-          {props.projects.slice(0, 12).map((p) => {
-            const isOpen = expandedProject === p.path
-            const isCurrent = p.path === props.currentProjectPath
-            return (
-              <div key={p.path} className={`project-item ${isCurrent ? 'current' : ''}`}>
-                <div
-                  className="project-row"
-                  onClick={() => {
-                    if (isOpen) setExpandedProject(null)
-                    else {
-                      setExpandedProject(p.path)
-                      props.onOpenProject(p.path)
-                    }
-                  }}
-                  title={p.path}
-                >
-                  {isOpen ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
-                  <span className="project-name-text">{p.name}</span>
-                </div>
-                {isOpen && (
-                  <div className="task-list">
-                    {p.tasks.length === 0 && <div className="nav-muted small">No tasks</div>}
-                    {p.tasks.slice(0, 20).map((t) => (
-                      <button key={t.id} className="task-row" onClick={() => props.onOpenTask(p, t)} title={t.prompt}>
-                        <span className="task-text">{t.prompt}</span>
-                        <span className="task-time">{timeAgo(t.createdAt)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+      <div className="projects-list">
+        {props.projects.length === 0 && <div className="nav-muted">No projects yet. Open a folder to start.</div>}
+        {props.projects.slice(0, 12).map((p) => {
+          const isOpen = expandedProject === p.path
+          const isCurrent = p.path === props.currentProjectPath
+          return (
+            <div key={p.path} className={`project-item ${isCurrent ? 'current' : ''}`}>
+              <div
+                className="project-row"
+                onClick={() => {
+                  if (isOpen) setExpandedProject(null)
+                  else {
+                    setExpandedProject(p.path)
+                    props.onOpenProject(p.path)
+                  }
+                }}
+                title={p.path}
+              >
+                {isOpen ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
+                <span className="project-name-text">{p.name}</span>
               </div>
-            )
-          })}
-        </div>
+              {isOpen && (
+                <div className="task-list">
+                  {p.tasks.length === 0 && <div className="nav-muted small">No tasks</div>}
+                  {p.tasks.slice(0, 20).map((t) => (
+                    <button key={t.id} className="task-row" onClick={() => props.onOpenTask(p, t)} title={t.prompt}>
+                      <span className="task-text">{t.prompt}</span>
+                      <span className="task-time">{timeAgo(t.createdAt)}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       <div className="sidebar-bottom">

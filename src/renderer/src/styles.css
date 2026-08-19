@@ -169,13 +169,12 @@ textarea {
   border-right-color: transparent;
 }
 
-.sidebar-nav {
-  flex: 1;
-  overflow-y: auto;
-  padding: 10px 8px;
+.sidebar-top {
+  padding: 10px 8px 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex-shrink: 0;
 }
 
 .nav-item {
@@ -232,6 +231,10 @@ textarea {
 }
 
 .projects-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1106,64 +1109,65 @@ textarea {
 
 /* ─── Thought block (reasoning / <think>) ──────────────── */
 .thought-block {
-  margin-bottom: 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
+  margin-bottom: 6px;
+  background: transparent;
+  border: none;
   max-width: 100%;
-  transition: border-color 0.15s ease;
 }
 
 .thought-block.thinking {
-  border-color: var(--accent-soft);
+  border: none;
 }
 
 .thought-head {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 6px 10px;
+  padding: 4px 6px;
   cursor: pointer;
   user-select: none;
   font-size: 12.5px;
-  color: var(--text-2);
-  transition: background 0.15s ease, color 0.15s ease;
+  color: var(--text-0);
 }
 
-.thought-head:hover {
-  background: var(--bg-3);
-  color: var(--text-1);
+:root[data-theme='light'] .thought-head {
+  color: #000000;
 }
 
 .thought-icon {
-  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-0);
   line-height: 1;
+}
+
+:root[data-theme='light'] .thought-icon {
+  color: #000000;
 }
 
 .thought-label {
   flex: 1;
   font-weight: 500;
-  font-size: 12px;
+  font-size: 12.5px;
+  color: var(--text-0);
 }
 
-.thought-chevron {
-  display: flex;
-  align-items: center;
-  color: var(--text-2);
+:root[data-theme='light'] .thought-label {
+  color: #000000;
 }
 
 .thought-content {
-  padding: 8px 12px 10px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-1);
+  padding: 4px 6px 6px 30px;
+  border: none;
+  background: transparent;
 }
 
 .thought-text {
-  font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
   line-height: 1.55;
-  color: var(--text-2);
+  color: var(--text-1);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -1192,17 +1196,26 @@ textarea {
   user-select: none;
   font-size: 13px;
   border-radius: var(--radius-sm);
-  transition: background 0.12s;
-}
-
-.tool-card-head:hover {
-  background: var(--bg-hover);
 }
 
 .tool-spinner {
   width: 16px;
   text-align: center;
   color: var(--text-2);
+}
+
+.tool-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-0);
+  flex-shrink: 0;
+}
+
+:root[data-theme='light'] .tool-toggle {
+  color: #000000;
 }
 
 .tool-card.running .tool-spinner {
@@ -1213,6 +1226,7 @@ textarea {
 
 .tool-card.done .tool-spinner { color: var(--green); }
 .tool-card.error .tool-spinner { color: var(--red); }
+.tool-card.error .tool-toggle { color: var(--red); }
 
 .tool-name {
   font-family: var(--font-mono);
@@ -1232,6 +1246,10 @@ textarea {
   margin-left: auto;
   font-size: 11.5px;
   color: var(--text-2);
+}
+
+.tool-status-text.error {
+  color: var(--red);
 }
 
 .tool-chevron {
@@ -2675,6 +2693,10 @@ textarea {
   transition: opacity 0.12s;
 }
 
+.msg-stack.assistant .msg-actions {
+  align-self: flex-end;
+}
+
 .msg-stack:hover .msg-actions {
   opacity: 1;
 }
@@ -2721,24 +2743,22 @@ textarea {
 .web-results {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 8px 12px 10px;
+  gap: 6px;
+  padding: 4px 6px 6px 30px;
 }
 
 .web-result {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  background: var(--bg-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  padding: 2px 0;
   text-decoration: none;
-  transition: border-color 0.12s;
 }
 
-.web-result:hover {
-  border-color: var(--accent);
+.web-result:hover .web-title {
+  text-decoration: underline;
 }
 
 .web-title {
@@ -2761,7 +2781,7 @@ textarea {
 }
 
 .tool-detail-wrap {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .tool-detail {
@@ -2773,11 +2793,10 @@ textarea {
   word-break: break-word;
   max-height: 260px;
   overflow: auto;
-  padding: 10px 12px;
+  padding: 4px 6px 6px 30px;
   margin: 0;
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
 }
 
 /* Follow-up suggestion cards */

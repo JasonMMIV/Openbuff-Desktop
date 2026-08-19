@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
-import { ChevronIcon, CopyIcon, UndoIcon } from './Icons'
+import { ChevronIcon, CopyIcon, LightbulbIcon, TriangleIcon, UndoIcon } from './Icons'
 
 export interface ToolItem {
   toolName: string
@@ -205,13 +205,17 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
   return (
     <div className={`tool-card ${tool.status}${running ? ' running' : ''}`}>
       <div className="tool-card-head" onClick={() => setOpen((o) => !o)}>
-        <span className="tool-spinner">{running ? '⟳' : tool.status === 'done' ? '✓' : '✕'}</span>
+        {running ? (
+          <span className="tool-spinner">⟳</span>
+        ) : (
+          <span className="tool-toggle">
+            <TriangleIcon open={open} size={9} />
+          </span>
+        )}
         <span className="tool-name">{toolLabel(tool.toolName)}</span>
         {tool.agentType && <span className="tool-agent">{tool.agentType}</span>}
-        <span className="tool-status-text">{tool.status === 'running' ? 'Running…' : tool.status === 'done' ? 'Done' : 'Failed'}</span>
-        <span className="tool-chevron">
-          <ChevronIcon open={open} size={11} />
-        </span>
+        {tool.status === 'running' && <span className="tool-status-text">Running…</span>}
+        {tool.status === 'error' && <span className="tool-status-text error">Failed</span>}
       </div>
       {open && hasDetail && (
         <div className="tool-detail-wrap">
@@ -264,11 +268,8 @@ export function ThoughtBlock({
         className="thought-head"
         onClick={() => setUserToggled((prev) => (prev !== null ? !prev : !open))}
       >
-        <span className="thought-icon">{streaming ? '💭' : '💡'}</span>
-        <span className="thought-label">{streaming ? 'Thinking…' : 'Thought process'}</span>
-        <span className="thought-chevron">
-          <ChevronIcon open={open} size={11} />
-        </span>
+        <span className="thought-icon">{streaming ? '💭' : <LightbulbIcon size={14} />}</span>
+        <span className="thought-label">{streaming ? 'Thinking…' : 'Thinking'}</span>
       </div>
       {open && (
         <div className="thought-content">
@@ -350,7 +351,7 @@ export function AssistantBubble({
           </div>
         )}
         {onCopy && mainText.trim() && (
-          <span className="msg-actions">
+          <span className="msg-actions" onClick={(e) => e.stopPropagation()}>
             <button className="mini-btn" title="Copy" onClick={onCopy}>
               <CopyIcon size={12} />
             </button>

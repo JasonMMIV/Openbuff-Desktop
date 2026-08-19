@@ -55,6 +55,24 @@ export function ChevronIcon({ open, size = 12 }: { open: boolean; size?: number 
   )
 }
 
+export function TriangleIcon({ open, size = 9 }: { open: boolean; size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      style={{
+        transform: open ? 'rotate(90deg)' : 'none',
+        transition: 'transform 0.15s ease',
+        transformOrigin: 'center'
+      }}
+    >
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  )
+}
+
 export function FileIcon({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
