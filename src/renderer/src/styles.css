@@ -153,7 +153,7 @@ textarea {
 
 /* ─── Left sidebar (nav + content) ───────────────────── */
 .sidebar {
-  width: 272px;
+  width: 258px;
   flex-shrink: 0;
   background: var(--bg-1);
   border-right: 1px solid var(--border);
@@ -421,7 +421,7 @@ textarea {
 
 /* ─── Right sidebar (tabs + content) ─────────────────── */
 .activity-panel.right-content-panel {
-  width: 320px;
+  width: 306px;
   flex: 0 0 auto;
   background: var(--bg-1);
   border-left: 1px solid var(--border);
