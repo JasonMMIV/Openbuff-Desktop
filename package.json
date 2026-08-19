@@ -1,0 +1,37 @@
+{
+  "name": "openbuff-desktop",
+  "version": "0.1.0",
+  "description": "OpenBuff Desktop — Electron GUI for OpenBuff local-first agentic coding SDK",
+  "private": true,
+  "main": "./out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "smoke:sdk": "bun run scripts/smoke-sdk.ts",
+    "test:e2e": "bun build scripts/verify-e2e.ts --outfile=scripts/verify-e2e.mjs --target=node --format=esm --external electron --external @openbuff/sdk && npx electron scripts/verify-e2e.mjs"
+  },
+  "dependencies": {
+    "@openbuff/sdk": "file:openbuff-src/sdk",
+    "dompurify": "^3.4.13",
+    "highlight.js": "^11.12.0",
+    "marked": "^18.0.9",
+    "marked-highlight": "^2.2.4",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "typescript": "^7.0.2",
+    "typescript5": "npm:typescript@^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^43.4.0",
+    "electron-vite": "^5.0.0",
+    "vite": "^7.3.6"
+  }
+}

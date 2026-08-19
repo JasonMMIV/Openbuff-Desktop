@@ -1,0 +1,1419 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Sidebar, { type ProjectRecord, type TaskRecord, type SearchResult } from './components/Sidebar'
+import RightPanel, { type RightTab } from './components/RightPanel'
+import SettingsModal from './components/SettingsModal'
+import Composer, { type Attachment, type SkillInfo } from './components/Composer'
+import { AssistantBubble, ToolCard, UserBubble, type ToolItem } from './components/ChatMessage'
+import {
+  AppIcon,
+  ChevronDownIcon,
+  FolderIcon,
+  FolderOpenIcon,
+  FolderPlusIcon,
+  PanelLeftIcon,
+  PanelRightIcon
+} from './components/Icons'
+import type { TreeNode } from './components/FileTree'
+import type { UiEvent } from '../../preload'
+
+interface UiSettings {
+  providers: { id: string; label: string; models: string[] }[]
+  activeModel: string
+  reasoningEffort: string
+  approvalMode: string
+}
+
+type ChatItem =
+  | { kind: 'user'; text: string }
+  | { kind: 'assistant'; text: string }
+  | { kind: 'tool'; tool: ToolItem }
+  | { kind: 'system'; text: string }
+
+const SUGGESTIONS = ['Analyze this project architecture', 'Write tests for this', 'Fix a bug', 'Refactor this code']
+
+// Browser preview mode: renders the full UI with mock data when Electron preload is absent
+const IS_PREVIEW = typeof window.openbuff === 'undefined'
+
+const PREVIEW_SETTINGS: UiSettings = {
+  providers: [
+    { id: 'openai', label: 'OpenAI API', models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'] },
+    { id: 'anthropic', label: 'Anthropic API', models: ['claude-sonnet-4-5', 'claude-haiku-4-5'] }
+  ],
+  activeModel: 'openai/gpt-5.5',
+  reasoningEffort: 'default',
+  approvalMode: 'balanced'
+}
+
+const PREVIEW_SKILLS: SkillInfo[] = [
+  { name: 'meta', description: 'Broad project-level implementation and validation heuristics', path: '', source: 'project' },
+  { name: 'refactor', description: 'Safely restructure code with minimal behavior change', path: '', source: 'home' }
+]
+
+const PREVIEW_ITEMS: ChatItem[] = [
+  { kind: 'user', text: 'Add zero-division error handling to the divide function' },
+  {
+    kind: 'assistant',
+    text: 'Let me look at the current `calculator.js` before planning the change.\n\n```js\n// src/calculator.js\nexport function divide(a, b) {\n  return a / b\n}\n```\n\nThis function divides directly, so it returns `Infinity` when `b` is 0. I\'ll add an explicit zero-division check.'
+  },
+  { kind: 'tool', tool: { toolName: 'edit_transaction', status: 'done', agentType: 'editor', detail: 'applied 1 edit: src/calculator.js\n+  if (b === 0) {\n+    throw new RangeError(\'Cannot divide by zero\')\n+  }' } },
+  {
+    kind: 'assistant',
+    text: 'Done:\n\n- `divide` now throws a `RangeError` when the divisor is 0\n- The original calculation logic is preserved\n\n```js\nexport function divide(a, b) {\n  if (b === 0) {\n    throw new RangeError(\'Cannot divide by zero\')\n  }\n  return a / b\n}\n```'
+  }
+]
+
+function flattenTree(nodes: TreeNode[], cwd: string): string[] {
+  const out: string[] = []
+  for (const n of nodes) {
+    const rel = n.path.replace(cwd, '').replace(/^[\\/]+/, '')
+    if (!rel) continue
+    const display = rel.split('\\').join('/')
+    if (n.type === 'file') out.push(display)
+    if (n.children) out.push(...flattenTree(n.children, cwd))
+  }
+  return out
+}
+
+function absPath(cwd: string, rel: string): string {
+  const sep = cwd.includes('\\') ? '\\' : '/'
+  return `${cwd.replace(/[\\/]+$/, '')}${sep}${rel.split('/').join(sep)}`
+}
+
+function basenameOf(p: string): string {
+  return p.split(/[\\/]/).pop() ?? p
+}
+
+/** Extract next-step suggestions from the suggest_followups tool output. */
+function parseFollowups(message: string): string[] {
+  if (!message) return []
+  const out: string[] = []
+  // JSON shapes: [{followups: [...]}], [{suggestions: [...]}], arrays of strings/objects
+  try {
+    const parsed = JSON.parse(message)
+    const collect = (v: unknown): void => {
+      if (typeof v === 'string' && v.trim()) out.push(v.trim())
+      else if (Array.isArray(v)) v.forEach(collect)
+      else if (v && typeof v === 'object') {
+        const rec = v as Record<string, unknown>
+        for (const key of ['followups', 'suggestions', 'items', 'prompts', 'text', 'title', 'prompt']) {
+          if (key in rec) collect(rec[key])
+        }
+      }
+    }
+    collect(parsed)
+  } catch {
+    // Not JSON — fall through to line parsing
+  }
+  if (out.length === 0) {
+    for (const line of message.split('\n')) {
+      const m = line.match(/^\s*(?:[-*•\d.)]+\s+)?"?([^"]{4,})"?\s*$/)
+      if (m && !/^\s*$/.test(m[1])) out.push(m[1].trim())
+    }
+  }
+  return out.slice(0, 6)
+}
+
+/** Derive the current execution stage from recent tool/sub-agent activity. */
+function deriveStage(events: UiEvent[], running: boolean): string | null {
+  if (!running) return null
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]
+    const name = (e.toolName ?? e.agentType ?? '').toLowerCase()
+    if (e.type === 'subagent_start' || e.type === 'tool_start' || e.type === 'tool_call') {
+      if (/planner|think|plan/.test(name)) return 'Planning'
+      if (/editor|write|implement|create_file/.test(name)) return 'Editing'
+      if (/review|critic/.test(name)) return 'Reviewing'
+      if (/bash|test|typecheck|build|lint|validate/.test(name)) return 'Validating'
+      if (/search|picker|research|reader|read_|list_|query/.test(name)) return 'Researching'
+    }
+  }
+  return 'Working'
+}
+
+export default function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    const saved = localStorage.getItem('openbuff-theme')
+    return saved === 'light' ? 'light' : 'dark'
+  })
+  const [cwd, setCwd] = useState<string | null>(null)
+  const [projectName, setProjectName] = useState('')
+  const [branch, setBranch] = useState('')
+  const [hasProvider, setHasProvider] = useState(false)
+  const [running, setRunning] = useState(false)
+  const [prompt, setPrompt] = useState('')
+  const [chatItems, setChatItems] = useState<ChatItem[]>([])
+  const [events, setEvents] = useState<UiEvent[]>([])
+  const [selectedFile, setSelectedFile] = useState<{ path: string; content: string; name: string } | null>(null)
+
+  const [settings, setSettings] = useState<UiSettings>({ providers: [], activeModel: '', reasoningEffort: 'default', approvalMode: 'balanced' })
+  const [projects, setProjects] = useState<ProjectRecord[]>([])
+  const [skills, setSkills] = useState<SkillInfo[]>([])
+  const [fileCandidates, setFileCandidates] = useState<string[]>([])
+
+  const [leftOpen, setLeftOpen] = useState(true)
+  const [rightOpen, setRightOpen] = useState(false)
+  const [rightTab, setRightTab] = useState<RightTab>('activity')
+
+  const [showSettings, setShowSettings] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [tokenUsage, setTokenUsage] = useState<{ used: number; max: number } | null>(null)
+  const [totalCost, setTotalCost] = useState(0)
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [followups, setFollowups] = useState<string[]>([])
+  const [projectMenuOpen, setProjectMenuOpen] = useState(false)
+  const [historyTask, setHistoryTask] = useState<{ id: string; prompt: string } | null>(null)
+  const [historyResults, setHistoryResults] = useState<SearchResult[]>([])
+  const [pendingJump, setPendingJump] = useState<{ taskId?: string; index: number } | null>(null)
+  const [pendingRevert, setPendingRevert] = useState<{ files: string[]; lastUserIdx: number; lastUserText: string } | null>(null)
+  const [focusSignal, setFocusSignal] = useState(0)
+  /** Set when the last run was interrupted (stopped or failed) but its state was preserved. */
+  const [resumeInfo, setResumeInfo] = useState<{ prompt: string } | null>(null)
+  const [approvalRequest, setApprovalRequest] = useState<{ message: string; raw?: unknown } | null>(null)
+
+  const previousRunRef = useRef<unknown>(null)
+  const streamRef = useRef('')
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const toolIndexRef = useRef(-1)
+  const changedFilesRef = useRef<string[]>([])
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+  const currentTaskRef = useRef<string | null>(null)
+  const projectMenuRef = useRef<HTMLDivElement>(null)
+  const msgRefs = useRef<(HTMLDivElement | null)[]>([])
+
+  // Theme switch
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('openbuff-theme', theme)
+    if (!IS_PREVIEW) window.openbuff.setTheme(theme)
+  }, [theme])
+
+  // Close the project selector when clicking elsewhere
+  useEffect(() => {
+    if (!projectMenuOpen) return
+    const onDown = (e: MouseEvent) => {
+      if (projectMenuRef.current && !projectMenuRef.current.contains(e.target as Node)) {
+        setProjectMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [projectMenuOpen])
+
+  const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), [])
+
+  // Initial state
+  useEffect(() => {
+    if (IS_PREVIEW) {
+      setCwd('C:/Users/w2bn1/Desktop/OpenBuff/demo-project')
+      setProjectName('demo-project')
+      setBranch('main')
+      setHasProvider(true)
+      setSettings(PREVIEW_SETTINGS)
+      setProjects([
+        {
+          path: 'C:/Users/w2bn1/Desktop/OpenBuff/demo-project',
+          name: 'demo-project',
+          tasks: [
+            {
+              id: 't1',
+              prompt: 'Add zero-division error handling to the divide function',
+              createdAt: Date.now() - 3600_000,
+              messages: [
+                { kind: 'user', text: 'Add zero-division error handling to the divide function' },
+                {
+                  kind: 'assistant',
+                  text: 'Done — `divide` now throws a `RangeError` when the divisor is 0, and the original calculation logic is preserved.'
+                }
+              ]
+            }
+          ]
+        }
+      ])
+      setSkills(PREVIEW_SKILLS)
+      setChatItems(PREVIEW_ITEMS)
+      setEvents([
+        { type: 'subagent_start', agentType: 'file-picker' },
+        { type: 'tool_start', toolName: 'read_files' },
+        { type: 'tool_result', toolName: 'read_files', status: 'done' },
+        {
+          type: 'tool_call',
+          toolName: 'query_index',
+          queryInput: { query: 'zero division error handling', mode: 'search', limit: 5 }
+        },
+        {
+          type: 'tool_result',
+          toolName: 'query_index',
+          status: 'done',
+          queryIndex: {
+            kind: 'query_index_result',
+            results: [
+              {
+                path: 'src/calculator.js',
+                score: 8.4,
+                matchedOn: ['symbol', 'path'],
+                symbols: ['divide', 'multiply'],
+                matchedSnippets: ['export function divide(a, b)']
+              },
+              {
+                path: 'README.md',
+                score: 2.1,
+                matchedOn: ['concept'],
+                relatedFiles: [{ path: 'src/calculator.js', score: 1.2, reason: 'references calculator module' }]
+              }
+            ],
+            totalIndexed: 4,
+            indexAge: 42_000,
+            status: { state: 'ready', ready: true, semantic: 'disabled', totalIndexed: 4, indexAge: 42_000 }
+          },
+          message: 'Found 2 indexed file results.'
+        },
+        { type: 'tool_start', toolName: 'edit_transaction' },
+        { type: 'tool_result', toolName: 'edit_transaction', status: 'done', message: 'applied 1 edit: src/calculator.js\n+  if (b === 0) {\n+    throw new RangeError(\'Cannot divide by zero\')\n+  }' },
+        { type: 'finish' }
+      ])
+      return
+    }
+    void (async () => {
+      const state = (await window.openbuff.getState()) as {
+        cwd: string | null
+        running: boolean
+        settings: {
+          providers: { id: string; label: string; models: string[] }[]
+          activeModel: string
+          reasoningEffort: string
+          approvalMode: string
+          hasProvider: boolean
+          projects: ProjectRecord[]
+        }
+      }
+      setCwd(state.cwd)
+      setRunning(state.running)
+      setHasProvider(state.settings.hasProvider)
+      setSettings({
+        providers: state.settings.providers,
+        activeModel: state.settings.activeModel,
+        reasoningEffort: state.settings.reasoningEffort,
+        approvalMode: state.settings.approvalMode
+      })
+      setProjects(state.settings.projects ?? [])
+    })()
+  }, [])
+
+  // Project name, git branch, @-file candidates, skills
+  useEffect(() => {
+    if (!cwd) return
+    if (IS_PREVIEW) {
+      setFileCandidates(['src/calculator.js', 'src/index.js', 'README.md', 'package.json'])
+      return
+    }
+    void window.openbuff.projectName(cwd).then(setProjectName)
+    void window.openbuff.gitBranch(cwd).then(setBranch)
+    void window.openbuff.listFiles(cwd).then((t) => setFileCandidates(flattenTree(t as TreeNode[], cwd)))
+    void window.openbuff.listSkills(cwd).then((s) => setSkills(s as SkillInfo[]))
+  }, [cwd])
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight })
+  }, [chatItems])
+
+  // SDK events → UI
+  useEffect(() => {
+    if (IS_PREVIEW) return
+    const unsubscribe = window.openbuff.onEvent((event) => {
+      if (event.type === 'stream') {
+        streamRef.current += event.text ?? ''
+        setChatItems((prev) => {
+          const next = [...prev]
+          if (next.length > 0 && next[next.length - 1].kind === 'assistant') {
+            next[next.length - 1] = { kind: 'assistant', text: streamRef.current }
+          } else {
+            next.push({ kind: 'assistant', text: streamRef.current })
+          }
+          return next
+        })
+        return
+      }
+
+      if (event.type === 'tool_start' || event.type === 'tool_call') {
+        // The SDK only surfaces the actual followup items on the tool_call input
+        // (its tool_result just says "Followups suggested!"), so parse here.
+        if (event.toolName === 'suggest_followups') {
+          const parsed = parseFollowups(event.message ?? '')
+          if (parsed.length > 0) setFollowups(parsed)
+        }
+        // Remember files mutated this run so the Revert button can undo them.
+        if (event.files?.length) {
+          changedFilesRef.current = [...new Set([...changedFilesRef.current, ...event.files])]
+        }
+        if (event.toolName === 'suggest_followups') {
+          // Represented by the clickable followup cards — no separate tool card in the chat.
+          return
+        }
+        if (event.toolName === 'query_index' && event.type === 'tool_call') {
+          setEvents((prev) => [...prev.slice(-299), event])
+        }
+        const tool: ToolItem = { toolName: event.toolName ?? 'tool', status: 'running', agentType: event.agentType }
+        toolIndexRef.current = chatItemsRef.current.length
+        setChatItems((prev) => [...prev, { kind: 'tool', tool }])
+        return
+      }
+
+      if (event.type === 'tool_result') {
+        const idx = toolIndexRef.current
+        toolIndexRef.current = -1
+        if (event.toolName === 'suggest_followups') {
+          const parsed = parseFollowups(event.message ?? '')
+          if (parsed.length > 0) setFollowups(parsed)
+        }
+        if (idx >= 0) {
+          setChatItems((prev) => {
+            const next = [...prev]
+            const item = next[idx]
+            if (item && item.kind === 'tool') {
+              next[idx] = { kind: 'tool', tool: { ...item.tool, status: 'done', detail: event.message ?? event.status } }
+            }
+            return next
+          })
+        }
+        if (event.toolName === 'query_index') {
+          setEvents((prev) => [...prev.slice(-299), event])
+          if (event.queryIndex) {
+            setRightOpen(true)
+            setRightTab('index')
+          }
+        }
+        return
+      }
+
+      if (event.type === 'context_window' && typeof event.used === 'number' && typeof event.max === 'number') {
+        setTokenUsage({ used: event.used, max: event.max })
+        return
+      }
+
+      if (event.type === 'finish' && typeof event.totalCost === 'number') {
+        const cost = event.totalCost
+        setTotalCost((c) => c + cost)
+      }
+
+      if (event.type === 'approval_request') {
+        setApprovalRequest({ message: event.message ?? 'Permission requested', raw: event.raw })
+        return
+      }
+
+      if (event.type === 'error') {
+        setApprovalRequest(null)
+        setChatItems((prev) => [...prev, { kind: 'system', text: event.message ?? 'An error occurred' }])
+        return
+      }
+
+      setEvents((prev) => [...prev.slice(-299), event])
+    })
+    return unsubscribe
+  }, [])
+
+  // Keep chatItems in a ref for event callbacks
+  const chatItemsRef = useRef(chatItems)
+  chatItemsRef.current = chatItems
+
+  const refreshProjects = useCallback(() => {
+    if (IS_PREVIEW) return
+    void window.openbuff.listProjects().then((p) => setProjects(p as ProjectRecord[]))
+  }, [])
+
+  const selectFolder = useCallback(async () => {
+    if (IS_PREVIEW) return
+    const path = await window.openbuff.selectFolder()
+    if (path) {
+      setCwd(path as string)
+      setChatItems([])
+      setEvents([])
+      streamRef.current = ''
+      setNotice(null)
+      setAttachments([])
+      setTokenUsage(null)
+      setTotalCost(0)
+      setHistoryTask(null)
+      setResumeInfo(null)
+      currentTaskRef.current = null
+      refreshProjects()
+    }
+  }, [refreshProjects])
+
+  // Compose final prompt: resolve @ files, /skills, and attachments
+  const buildFinalPrompt = useCallback(
+    async (raw: string): Promise<string> => {
+      const lines: string[] = []
+      let text = raw
+
+      // Resolve /skill:name token
+      const skillTokens = text.match(/\/skill:([\w.-]+)/g) ?? []
+      for (const token of skillTokens) {
+        const name = token.replace('/skill:', '')
+        const skill = skills.find((s) => s.name === name)
+        if (skill && skill.path && !IS_PREVIEW) {
+          const res = (await window.openbuff.readSkillFile(skill.path)) as { ok: boolean; content?: string }
+          if (res.ok) {
+            lines.push(`I invoke the following skill: ${name}\n\n${res.content}`)
+          }
+        }
+        text = text.split(token).join(' ')
+      }
+
+      // @-mention files → add to attachments
+      const mentionPaths = new Set<string>()
+      for (const token of text.split(/\s+/)) {
+        if (token.startsWith('@')) {
+          const rel = token.slice(1)
+          if (cwd && fileCandidates.includes(rel)) mentionPaths.add(rel)
+        }
+      }
+      const allAttachments = [...attachments]
+      for (const rel of mentionPaths) {
+        if (!allAttachments.some((a) => a.path === rel)) {
+          allAttachments.push({ path: rel, name: basenameOf(rel), isDir: false, isRelative: true })
+        }
+      }
+
+      if (allAttachments.length > 0 && cwd) {
+        lines.push('## Attached files')
+        for (const att of allAttachments) {
+          const full = att.isRelative ? absPath(cwd, att.path) : att.path
+          if (IS_PREVIEW) {
+            lines.push(`\n<file path="${att.path}">\n(preview content)\n</file>`)
+            continue
+          }
+          if (att.isDir) {
+            const tree = (await window.openbuff.listFiles(full)) as TreeNode[]
+            const files = flattenTree(tree, full)
+            lines.push(`\n<folder path="${att.path}">\n${files.slice(0, 200).join('\n')}\n</folder>`)
+          } else {
+            const res = (await window.openbuff.readFile(full)) as { ok: boolean; content?: string; error?: string }
+            if (res.ok) {
+              const content = (res.content ?? '').slice(0, 120_000)
+              lines.push(`\n<file path="${att.path}">\n${content}\n</file>`)
+            } else {
+              lines.push(`\n<file path="${att.path}">\n[unreadable: ${res.error}]\n</file>`)
+            }
+          }
+        }
+      }
+
+      const final = text.trim() + (lines.length > 0 ? `\n\n${lines.join('\n\n')}` : '')
+      return final
+    },
+    [attachments, skills, fileCandidates, cwd]
+  )
+
+  const send = useCallback(
+    async (textOverride?: string) => {
+      const text = (textOverride ?? prompt).trim()
+      if (!text || !cwd || running) return
+      setPrompt('')
+      streamRef.current = ''
+      changedFilesRef.current = []
+      setFollowups([])
+      setChatItems((prev) => [...prev, { kind: 'user', text }, { kind: 'assistant', text: '' }])
+      setRunning(true)
+      setNotice(null)
+      setHistoryTask(null)
+      setResumeInfo(null)
+      if (!IS_PREVIEW) {
+        const res = (await window.openbuff.saveTask({ cwd, prompt: text.slice(0, 300) })) as { ok: boolean; task?: { id: string } }
+        currentTaskRef.current = res?.ok ? res.task?.id ?? null : null
+      }
+      refreshProjects()
+
+    const finalPrompt = await buildFinalPrompt(text)
+
+    if (IS_PREVIEW) {
+      const reply =
+        'Got it! I will analyze the project first, then make the changes.\n\n```js\nconsole.log(\'hello\')\n```\n\nDoes this look right?'
+      let i = 0
+      const timer = setInterval(() => {
+        i += 4
+        if (i >= reply.length) {
+          clearInterval(timer)
+          streamRef.current = reply
+          setChatItems((prev) => {
+            const next = [...prev]
+            next[next.length - 1] = { kind: 'assistant', text: reply }
+            return next
+          })
+          setRunning(false)
+        } else {
+          streamRef.current = reply.slice(0, i)
+          setChatItems((prev) => {
+            const next = [...prev]
+            next[next.length - 1] = { kind: 'assistant', text: reply.slice(0, i) }
+            return next
+          })
+        }
+      }, 40)
+      return
+    }
+    try {
+      const result = (await window.openbuff.runPrompt({
+        cwd,
+        prompt: finalPrompt,
+        previousRun: previousRunRef.current
+      })) as { ok: boolean; error?: string; runState?: unknown }
+      if (!result.ok) {
+        setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Execution failed' }])
+      } else {
+        previousRunRef.current = result.runState
+        // Interrupted (stopped or failed) runs preserve their state; offer to resume.
+        if ((result as { interrupted?: boolean }).interrupted) {
+          setResumeInfo({ prompt: text })
+        }
+      }
+      void window.openbuff.gitBranch(cwd).then(setBranch)
+    } catch (err) {
+      setChatItems((prev) => [...prev, { kind: 'system', text: String(err) }])
+    } finally {
+      setRunning(false)
+      setApprovalRequest(null)
+      // Persist the finished conversation transcript + SDK run state to the task's own files
+      if (!IS_PREVIEW) {
+        const taskId = currentTaskRef.current
+        if (taskId) {
+          setTimeout(() => {
+            if (currentTaskRef.current !== taskId) return
+            const messages = chatItemsRef.current.map((item) =>
+              item.kind === 'tool' ? { kind: 'tool', tool: item.tool } : { kind: item.kind, text: item.text }
+            )
+            void window.openbuff.saveTaskTranscript({ taskId, messages })
+            void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
+          }, 300)
+        }
+      }
+    }
+  }, [prompt, cwd, running, buildFinalPrompt, refreshProjects])
+
+  const stop = useCallback(() => {
+    setApprovalRequest(null)
+    if (!IS_PREVIEW) void window.openbuff.abort()
+  }, [])
+
+  // Resume an interrupted run from its preserved state (no re-appending the user prompt).
+  const resumeRun = useCallback(async () => {
+    const info = resumeInfo
+    if (!info || !cwd || running) return
+    setRunning(true)
+    setNotice(null)
+    setResumeInfo(null)
+    setChatItems((prev) => [...prev, { kind: 'assistant', text: '' }])
+    streamRef.current = ''
+    if (IS_PREVIEW) {
+      setRunning(false)
+      setNotice('Resume is available in the Electron app (preview mode does not persist run state).')
+      return
+    }
+    try {
+      const result = (await window.openbuff.runPrompt({
+        cwd,
+        prompt: info.prompt,
+        previousRun: previousRunRef.current,
+        resume: true,
+        taskId: currentTaskRef.current ?? undefined
+      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean }
+      if (!result.ok) {
+        setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Resume failed' }])
+      } else {
+        previousRunRef.current = result.runState
+        if (result.interrupted) setResumeInfo({ prompt: info.prompt })
+      }
+      void window.openbuff.gitBranch(cwd).then(setBranch)
+    } catch (err) {
+      setChatItems((prev) => [...prev, { kind: 'system', text: String(err) }])
+    } finally {
+      setRunning(false)
+      const taskId = currentTaskRef.current
+      if (taskId) {
+        setTimeout(() => {
+          if (currentTaskRef.current !== taskId) return
+          const messages = chatItemsRef.current.map((item) =>
+            item.kind === 'tool' ? { kind: 'tool', tool: item.tool } : { kind: item.kind, text: item.text }
+          )
+          void window.openbuff.saveTaskTranscript({ taskId, messages })
+          void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
+        }, 300)
+      }
+    }
+  }, [resumeInfo, cwd, running])
+
+  // Discard the preserved state so the next send starts a fresh turn.
+  const discardResume = useCallback(() => {
+    previousRunRef.current = null
+    setResumeInfo(null)
+  }, [])
+
+
+  const newTask = useCallback(() => {
+    setChatItems([])
+    setEvents([])
+    streamRef.current = ''
+    previousRunRef.current = null
+    changedFilesRef.current = []
+    setAttachments([])
+    setTokenUsage(null)
+    setTotalCost(0)
+    setFollowups([])
+    setPrompt('')
+    setHistoryTask(null)
+    setResumeInfo(null)
+    currentTaskRef.current = null
+  }, [])
+
+  // Clicking Revert opens an in-app confirmation instead of blocking window.confirm.
+  const requestRevert = useCallback(() => {
+    // Find the last user message — the exchange being undone.
+    let lastUserIdx = -1
+    let lastUserText = ''
+    for (let i = chatItems.length - 1; i >= 0; i--) {
+      const item = chatItems[i]
+      if (item.kind === 'user') {
+        lastUserIdx = i
+        lastUserText = item.text
+        break
+      }
+    }
+    const files = [...new Set(changedFilesRef.current)]
+    if (files.length === 0 && lastUserIdx < 0) {
+      setNotice('No file changes detected in this conversation.')
+      return
+    }
+    setPendingRevert({ files, lastUserIdx, lastUserText })
+  }, [chatItems])
+
+  const confirmRevert = useCallback(async () => {
+    const pending = pendingRevert
+    setPendingRevert(null)
+    if (!pending || !cwd) return
+    const { files, lastUserIdx, lastUserText } = pending
+    // Update the UI immediately: drop the exchange and put the original message
+    // back into the composer (unsent) so the user can edit it right away.
+    if (lastUserIdx >= 0) {
+      setChatItems((prev) => prev.slice(0, lastUserIdx))
+      setPrompt(lastUserText)
+    }
+    setEvents([])
+    streamRef.current = ''
+    previousRunRef.current = null
+    changedFilesRef.current = []
+    setFollowups([])
+    setHistoryTask(null)
+    // Undo the file changes in parallel so a large exchange doesn't stall the UI.
+    let okCount = 0
+    const errors: string[] = []
+    if (!IS_PREVIEW) {
+      if (files.length > 0) setNotice(`Reverting ${files.length} file(s)…`)
+      const results = await Promise.all(
+        files.map(async (f) => {
+          const res = (await window.openbuff.gitRevert({ cwd, file: f })) as { ok: boolean; error?: string }
+          return { f, res }
+        })
+      )
+      for (const { f, res } of results) {
+        if (res.ok) okCount++
+        else errors.push(`${f}: ${res.error ?? 'failed'}`)
+      }
+      void window.openbuff.gitBranch(cwd).then(setBranch)
+    } else {
+      okCount = files.length
+    }
+    // Remove this exchange from persisted history (task record + transcript + runState files).
+    const taskId = currentTaskRef.current
+    currentTaskRef.current = null
+    if (taskId && !IS_PREVIEW) {
+      void window.openbuff.deleteTask(taskId)
+      refreshProjects()
+    }
+    if (errors.length > 0) {
+      setNotice(`Reverted ${okCount}/${files.length} file(s). ${errors.slice(0, 3).join('; ')}`)
+    } else if (files.length > 0) {
+      setNotice(`Reverted ${okCount} file(s). Your original message is back in the input box — edit and resend.`)
+    } else {
+      setNotice('Exchange discarded. Your original message is back in the input box — edit and resend.')
+    }
+    // Focus the composer so the restored message is immediately editable.
+    setFocusSignal((n) => n + 1)
+  }, [pendingRevert, cwd, refreshProjects])
+
+  const openFileByPath = useCallback(async (path: string, name: string) => {
+    if (IS_PREVIEW) {
+      setSelectedFile({ path, content: '// simulated file content (preview mode)', name })
+      return
+    }
+    const result = (await window.openbuff.readFile(path)) as { ok: boolean; content?: string; error?: string }
+    if (result.ok) {
+      setSelectedFile({ path, content: result.content ?? '', name })
+    }
+  }, [])
+
+  const onSelectFile = useCallback(
+    (node: TreeNode) => {
+      if (node.type !== 'file') return
+      void openFileByPath(node.path, node.name)
+    },
+    [openFileByPath]
+  )
+
+  const onSettingsSaved = useCallback(
+    (saved: { hasProvider: boolean }) => {
+      setHasProvider(saved.hasProvider)
+      setShowSettings(false)
+      setNotice('✓ Provider settings saved')
+      if (!IS_PREVIEW) {
+        void window.openbuff.getState().then((state) => {
+          const s = (state as { settings: { activeModel: string; reasoningEffort: string; approvalMode: string; providers: { id: string; label: string; models: string[] }[] } }).settings
+          setSettings({ providers: s.providers, activeModel: s.activeModel, reasoningEffort: s.reasoningEffort, approvalMode: s.approvalMode })
+        })
+        refreshProjects()
+      }
+    },
+    [refreshProjects]
+  )
+
+  const onModelChange = useCallback((m: string) => {
+    setSettings((prev) => ({ ...prev, activeModel: m }))
+    if (!IS_PREVIEW) {
+      void window.openbuff.saveSettings({
+        providers: settingsRef.current.providers,
+        activeModel: m,
+        reasoningEffort: settingsRef.current.reasoningEffort,
+        approvalMode: settingsRef.current.approvalMode,
+        apiKeys: {},
+        deleteKeys: []
+      })
+    }
+  }, [])
+
+  const onReasoningChange = useCallback((r: string) => {
+    setSettings((prev) => ({ ...prev, reasoningEffort: r }))
+    if (!IS_PREVIEW) {
+      void window.openbuff.saveSettings({
+        providers: settingsRef.current.providers,
+        activeModel: settingsRef.current.activeModel,
+        reasoningEffort: r,
+        approvalMode: settingsRef.current.approvalMode,
+        apiKeys: {},
+        deleteKeys: []
+      })
+    }
+  }, [])
+
+  // Attachments
+  const onAttachFiles = useCallback(async () => {
+    if (IS_PREVIEW) {
+      setAttachments((prev) => [...prev, { path: 'src/calculator.js', name: 'calculator.js', isDir: false, isRelative: true }])
+      return
+    }
+    const paths = (await window.openbuff.selectFiles()) as string[]
+    const added: Attachment[] = []
+    for (const p of paths) {
+      const info = (await window.openbuff.pathInfo(p)) as { ok: boolean; isDir?: boolean; name?: string }
+      if (info.ok) {
+        added.push({ path: p, name: info.name ?? basenameOf(p), isDir: Boolean(info.isDir), isRelative: false })
+      }
+    }
+    setAttachments((prev) => {
+      const next = [...prev]
+      for (const a of added) {
+        if (!next.some((x) => x.path === a.path)) next.push(a)
+      }
+      return next
+    })
+  }, [])
+
+  const onAttachFilesPath = useCallback((relPath: string) => {
+    setAttachments((prev) =>
+      prev.some((a) => a.path === relPath)
+        ? prev
+        : [...prev, { path: relPath, name: basenameOf(relPath), isDir: false, isRelative: true }]
+    )
+  }, [])
+
+  const onRemoveAttachment = useCallback((path: string) => {
+    setAttachments((prev) => prev.filter((a) => a.path !== path))
+  }, [])
+
+  // Right panel tab
+  const onRightTab = useCallback((tab: RightTab) => {
+    setRightTab(tab)
+  }, [])
+
+  // Debounced cross-task history search
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setHistoryResults([])
+      return
+    }
+    const q = searchQuery.trim().toLowerCase()
+    const timer = setTimeout(async () => {
+      if (IS_PREVIEW) {
+        // Preview mode: search through preview projects' tasks (user and assistant only)
+        const out: SearchResult[] = []
+        for (const proj of projects) {
+          for (const t of proj.tasks ?? []) {
+            const msgs = (t.messages ?? []) as { kind?: string; text?: string }[]
+            msgs.forEach((msg, idx) => {
+              if (msg.kind !== 'user' && msg.kind !== 'assistant') return
+              const rawText = msg.text || ''
+              const text = rawText.replace(/\s+/g, ' ')
+              const matchIdx = text.toLowerCase().indexOf(q)
+              if (matchIdx >= 0) {
+                const start = Math.max(0, matchIdx - 20)
+                const snippet =
+                  (start > 0 ? '...' : '') + text.slice(start, start + 100) + (start + 100 < text.length ? '...' : '')
+                out.push({
+                  index: idx,
+                  kind: msg.kind === 'user' ? 'Msg' : 'AI',
+                  text: snippet,
+                  taskId: t.id,
+                  taskPrompt: t.prompt,
+                  projectPath: proj.path,
+                  projectName: proj.name,
+                  key: `prev-hist-${t.id}-${idx}`
+                })
+              }
+            })
+          }
+        }
+        setHistoryResults(out)
+        return
+      }
+
+      try {
+        const raw = (await window.openbuff.searchHistory(q)) as {
+          taskId: string
+          taskPrompt: string
+          projectPath: string
+          projectName: string
+          messageIndex: number
+          kind: 'user' | 'assistant'
+          snippet: string
+          createdAt: number
+        }[]
+        const out: SearchResult[] = (raw ?? []).map((r) => ({
+          index: r.messageIndex,
+          kind: r.kind === 'user' ? 'Msg' : 'AI',
+          text: r.snippet,
+          taskId: r.taskId,
+          taskPrompt: r.taskPrompt,
+          projectPath: r.projectPath,
+          projectName: r.projectName,
+          key: `hist-${r.taskId}-${r.messageIndex}`
+        }))
+        setHistoryResults(out)
+      } catch {
+        setHistoryResults([])
+      }
+    }, 200)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery, projects])
+
+  // Search chat messages (user & assistant across history and current conversation) AND file names
+  const searchResults = useMemo<SearchResult[]>(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    const out: SearchResult[] = []
+
+    // 1. Search current in-memory conversation (user and assistant only)
+    chatItems.forEach((item, i) => {
+      if (item.kind === 'user' || item.kind === 'assistant') {
+        const rawText = item.text || ''
+        const text = rawText.replace(/\s+/g, ' ')
+        const matchIdx = text.toLowerCase().indexOf(q)
+        if (matchIdx >= 0) {
+          const start = Math.max(0, matchIdx - 20)
+          const snippet =
+            (start > 0 ? '...' : '') + text.slice(start, start + 100) + (start + 100 < text.length ? '...' : '')
+          out.push({
+            index: i,
+            kind: item.kind === 'user' ? 'Msg' : 'AI',
+            text: snippet,
+            taskId: currentTaskRef.current ?? undefined,
+            taskPrompt: historyTask?.prompt ?? undefined,
+            projectPath: cwd ?? undefined,
+            projectName: projectName || undefined,
+            key: `current-${i}`
+          })
+        }
+      }
+    })
+
+    // 2. Include historical search results (excluding the active current task to prevent duplicates)
+    const activeTaskId = currentTaskRef.current
+    for (const hr of historyResults) {
+      if (activeTaskId && hr.taskId === activeTaskId) continue
+      out.push(hr)
+    }
+
+    // 3. Also search file names
+    fileCandidates.forEach((f) => {
+      if (f.toLowerCase().includes(q)) out.push({ index: -1, kind: 'File', text: f, key: `file-${f}` })
+    })
+    return out
+  }, [searchQuery, chatItems, historyResults, fileCandidates, historyTask, cwd, projectName])
+
+  const onOpenProject = useCallback(
+    async (path: string) => {
+      if (path === cwd) return
+      if (IS_PREVIEW) return
+      setCwd(path)
+      setChatItems([])
+      setEvents([])
+      streamRef.current = ''
+      previousRunRef.current = null
+      setAttachments([])
+      setTokenUsage(null)
+      setTotalCost(0)
+      setSelectedFile(null)
+      setHistoryTask(null)
+      setResumeInfo(null)
+      currentTaskRef.current = null
+      setProjectMenuOpen(false)
+      const pname = (await window.openbuff.projectName(path)) as string
+      setProjectName(pname)
+    },
+    [cwd]
+  )
+
+  const onOpenTask = useCallback(
+    async (project: ProjectRecord, task: TaskRecord) => {
+      await onOpenProject(project.path)
+      currentTaskRef.current = task.id
+      let msgs: unknown[] = []
+      if (IS_PREVIEW) {
+        msgs = task.messages ?? []
+      } else {
+        const [transcript, runStateRes] = await Promise.all([
+          window.openbuff.loadTaskTranscript(task.id),
+          window.openbuff.loadTaskRunState(task.id)
+        ])
+        const t = transcript as { ok: boolean; messages?: unknown[] }
+        msgs = t.ok ? t.messages ?? [] : []
+        const rs = runStateRes as { ok: boolean; runState?: { output?: { type?: string } } }
+        previousRunRef.current = rs.ok ? (rs.runState ?? null) : null
+        // If the saved run state ended in an error (interrupted/failed), offer to resume it.
+        if (rs.ok && rs.runState?.output?.type === 'error') {
+          setResumeInfo({ prompt: task.prompt })
+        } else {
+          setResumeInfo(null)
+        }
+      }
+      setChatItems(msgs as ChatItem[])
+      setHistoryTask({ id: task.id, prompt: task.prompt })
+      setPrompt('')
+    },
+    [onOpenProject]
+  )
+
+  const onSearchJump = useCallback(
+    async (r: SearchResult) => {
+      if (r.index < 0) {
+        // File result: open it in the file tree panel
+        if (!cwd) return
+        const abs = absPath(cwd, r.text)
+        const name = basenameOf(r.text)
+        if (IS_PREVIEW) {
+          setSelectedFile({ path: abs, content: '// simulated file content (preview mode)', name })
+        } else {
+          void window.openbuff.readFile(abs).then((res) => {
+            if (res.ok) setSelectedFile({ path: abs, content: res.content ?? '', name })
+          })
+        }
+        setRightOpen(true)
+        setRightTab('files')
+        return
+      }
+
+      // Check if the result belongs to the currently active task
+      const isCurrentTask =
+        (!r.taskId && !r.projectPath) ||
+        (r.taskId === currentTaskRef.current && (!r.projectPath || r.projectPath === cwd))
+
+      if (isCurrentTask) {
+        const el = msgRefs.current[r.index]
+        el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el?.classList.add('search-flash')
+        setTimeout(() => el?.classList.remove('search-flash'), 1500)
+        return
+      }
+
+      // Historical task: open it and set pending jump
+      if (r.taskId && r.projectPath) {
+        const targetProject = projects.find((p) => p.path === r.projectPath)
+        const targetTask = targetProject?.tasks.find((t) => t.id === r.taskId)
+        if (targetProject && targetTask) {
+          setPendingJump({ taskId: r.taskId, index: r.index })
+          await onOpenTask(targetProject, targetTask)
+          return
+        }
+      }
+
+      const el = msgRefs.current[r.index]
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el?.classList.add('search-flash')
+      setTimeout(() => el?.classList.remove('search-flash'), 1500)
+    },
+    [cwd, projects, onOpenTask]
+  )
+
+  // Safe jump scrolling when loading a historical task from search
+  useEffect(() => {
+    if (!pendingJump) return
+    const timer = setTimeout(() => {
+      const el = msgRefs.current[pendingJump.index]
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        el.classList.add('search-flash')
+        setTimeout(() => el.classList.remove('search-flash'), 1500)
+        setPendingJump(null)
+      }
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [chatItems, pendingJump])
+
+  const streaming = running && chatItems.length > 0
+  const currentStage = deriveStage(events, running)
+  const canSwitchProject = !running && chatItems.length === 0 && !historyTask
+
+  const models = settings.providers
+
+  return (
+    <div className="app">
+      <Sidebar
+          open={leftOpen}
+          onNewTask={newTask}
+          searchOpen={searchOpen}
+          onToggleSearch={() => setSearchOpen((v) => !v)}
+          searchQuery={searchQuery}
+          onSearchQuery={setSearchQuery}
+          searchResults={searchResults}
+          onSearchJump={onSearchJump}
+          projects={projects}
+          onNewProject={() => void selectFolder()}
+          onOpenProject={(p) => void onOpenProject(p)}
+          onOpenTask={(p, t) => void onOpenTask(p, t)}
+          onSettings={() => setShowSettings(true)}
+          currentProjectPath={cwd}
+        />
+
+      <main className="main">
+        <header className="topbar">
+          <div className="topbar-left">
+            <button
+              className="btn icon-only panel-toggle"
+              onClick={() => setLeftOpen((v) => !v)}
+              title={leftOpen ? 'Collapse sidebar' : 'Open sidebar'}
+            >
+              <PanelLeftIcon size={15} />
+            </button>
+            <div className="project-select" ref={projectMenuRef}>
+              <button
+                className={`project-name-btn${canSwitchProject ? '' : ' locked'}`}
+                onClick={canSwitchProject ? () => setProjectMenuOpen((v) => !v) : undefined}
+                title={canSwitchProject ? 'Choose project' : 'Project is locked while a conversation is active'}
+              >
+                {projectName ? <FolderIcon size={13} /> : <AppIcon size={14} />}
+                <span className="project-name">{projectName || 'OpenBuff Desktop'}</span>
+                {canSwitchProject && <ChevronDownIcon size={12} />}
+              </button>
+              {projectMenuOpen && canSwitchProject && (
+                <div className="project-menu">
+                  {projects.length === 0 && <div className="mention-empty">No projects yet</div>}
+                  {projects.slice(0, 15).map((p) => (
+                    <button
+                      key={p.path}
+                      className={`project-menu-item${p.path === cwd ? ' current' : ''}`}
+                      onClick={() => {
+                        setProjectMenuOpen(false)
+                        if (p.path !== cwd) void onOpenProject(p.path)
+                      }}
+                      title={p.path}
+                    >
+                      {p.path === cwd ? <FolderOpenIcon size={13} /> : <FolderIcon size={13} />}
+                      <span className="pm-name">{p.name}</span>
+                    </button>
+                  ))}
+                  {projects.length > 0 && <div className="project-menu-sep" />}
+                  <button
+                    className="project-menu-item add"
+                    onClick={() => {
+                      setProjectMenuOpen(false)
+                      void selectFolder()
+                    }}
+                  >
+                    <FolderPlusIcon size={13} />
+                    <span className="pm-name">Add Project…</span>
+                  </button>
+                </div>
+              )}
+            </div>
+            {branch && <span className="branch-badge">⎇ {branch}</span>}
+            {running && (
+              <span className="running-badge">
+                <span className="spinner-ring" /> {currentStage ?? 'Working'}
+              </span>
+            )}
+          </div>
+          <div className="topbar-right">
+            {!cwd && (
+              <button className="btn primary" onClick={() => void selectFolder()}>
+                <FolderIcon size={14} /> Select Folder
+              </button>
+            )}
+            {!hasProvider && (
+              <button className="btn warn" onClick={() => setShowSettings(true)}>
+                Set API Key
+              </button>
+            )}
+            <button
+              className="btn icon-only panel-toggle"
+              onClick={() => setRightOpen((v) => !v)}
+              title={rightOpen ? 'Collapse panel' : 'Open panel'}
+            >
+              <PanelRightIcon size={15} />
+            </button>
+          </div>
+        </header>
+
+        {notice && (
+          <div className="notice" onClick={() => setNotice(null)}>
+            {notice}
+          </div>
+        )}
+
+        {!cwd ? (
+          <div className="welcome">
+            <div className="welcome-logo">
+              <AppIcon size={72} />
+            </div>
+            <h1>OpenBuff Desktop</h1>
+            <p className="welcome-sub">Local-first AI coding assistant</p>
+            <button className="btn primary big" onClick={() => void selectFolder()}>
+              <FolderIcon size={16} /> Select a Project Folder
+            </button>
+            <p className="hint">BYOK mode: use your own API key. Code stays local, never uploaded to any server.</p>
+            {!hasProvider && (
+              <button className="link-btn" onClick={() => setShowSettings(true)}>
+                No provider configured? Open Settings →
+              </button>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="chat-scroll" ref={chatScrollRef}>
+              {!hasProvider && (
+                <div className="provider-warn">
+                  <span>No provider configured. Please set up your API key and model in Settings.</span>
+                  <button className="btn" onClick={() => setShowSettings(true)}>Open Settings</button>
+                </div>
+              )}
+
+              {chatItems.length === 0 && historyTask && (
+                <div className="panel-empty history-empty">This conversation has no saved messages yet.</div>
+              )}
+
+              {chatItems.length === 0 && !historyTask && (
+                <div className="chat-empty">
+                  <p>Type a command and OpenBuff will analyze your code and make changes.</p>
+                  <p className="hint">Type / for skills, @ for files.</p>
+                  <div className="suggestions">
+                    {SUGGESTIONS.map((s) => (
+                      <button
+                        key={s}
+                        className="suggestion-chip"
+                        disabled={running || !hasProvider}
+                        onClick={() => setPrompt(s)}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {chatItems.map((item, i) => {
+                if (item.kind === 'user') {
+                  const isLastUser = chatItems.slice(i + 1).every((it) => it.kind !== 'user')
+                  return (
+                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                      <UserBubble
+                        text={item.text}
+                        onCopy={() => void navigator.clipboard?.writeText(item.text)}
+                        onRevert={isLastUser && !running && !historyTask ? () => void requestRevert() : undefined}
+                      />
+                    </div>
+                  )
+                }
+                if (item.kind === 'assistant') {
+                  const isStreaming = streaming && i === chatItems.length - 1
+                  return (
+                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                      <AssistantBubble
+                        text={item.text}
+                        streaming={isStreaming}
+                        onCopy={() => void navigator.clipboard?.writeText(item.text)}
+                      />
+                    </div>
+                  )
+                }
+                if (item.kind === 'tool') {
+                  const isLastTool = i === chatItems.length - 1
+                  return (
+                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                      <ToolCard tool={item.tool} isLast={isLastTool && running} />
+                    </div>
+                  )
+                }
+                return (
+                  <div key={i} className="msg-row system" ref={(el) => { msgRefs.current[i] = el }}>
+                    <span className="system-bubble">⚠ {item.text}</span>
+                  </div>
+                )
+              })}
+
+              {followups.length > 0 && (
+                <div className="followups">
+                  <span className="followups-label">Suggested next steps</span>
+                  {followups.map((f, i) => (
+                    <button key={i} className="followup-card" disabled={running} onClick={() => setPrompt(f)}>
+                      {f}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {resumeInfo && !running && (
+              <div className="resume-banner">
+                <span className="resume-icon">↻</span>
+                <span className="resume-text">
+                  This run was interrupted — your progress and conversation are preserved.
+                </span>
+                <button className="btn primary small" onClick={() => void resumeRun()}>
+                  Resume
+                </button>
+                <button className="btn ghost small" onClick={discardResume} title="Discard the preserved state and start fresh">
+                  Discard
+                </button>
+              </div>
+            )}
+
+            {approvalRequest && (
+              <div className="resume-banner" style={{ border: '1px solid var(--border-warn, #f59e0b)' }}>
+                <span className="resume-icon" style={{ color: '#f59e0b' }}>🛡</span>
+                <span className="resume-text">
+                  <strong>Action requires approval:</strong> {approvalRequest.message}
+                </span>
+                <button
+                  className="btn primary small"
+                  onClick={() => {
+                    setApprovalRequest(null)
+                    void window.openbuff.respondApproval(true)
+                  }}
+                >
+                  Allow
+                </button>
+                <button
+                  className="btn ghost small"
+                  onClick={() => {
+                    setApprovalRequest(null)
+                    void window.openbuff.respondApproval(false)
+                  }}
+                >
+                  Deny
+                </button>
+              </div>
+            )}
+
+            <Composer
+              prompt={prompt}
+              onChange={setPrompt}
+              onSend={() => void send()}
+              onStop={stop}
+              onNewTask={newTask}
+              onSearchRequest={() => setSearchOpen(true)}
+              running={running}
+              disabled={!hasProvider}
+              attachments={attachments}
+              onAttachFiles={() => void onAttachFiles()}
+              onAttachFilesPath={onAttachFilesPath}
+              onRemoveAttachment={onRemoveAttachment}
+              providers={models}
+              activeModel={settings.activeModel}
+              onModelChange={onModelChange}
+              reasoningEffort={settings.reasoningEffort}
+              onReasoningChange={onReasoningChange}
+              tokenUsage={tokenUsage}
+              totalCost={totalCost}
+              fileCandidates={fileCandidates}
+              skills={skills}
+              focusSignal={focusSignal}
+            />
+          </>
+        )}
+      </main>
+
+      <RightPanel
+          open={rightOpen}
+          tab={rightTab}
+          onTab={onRightTab}
+          cwd={cwd}
+          selectedFile={selectedFile}
+          onSelectFile={onSelectFile}
+          onOpenFile={(path) => void openFileByPath(path, basenameOf(path))}
+          events={events}
+          onCloseFile={() => setSelectedFile(null)}
+          running={running}
+        />
+
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} onSaved={onSettingsSaved} theme={theme} onToggleTheme={toggleTheme} />
+      )}
+
+      {pendingRevert && (
+        <div className="modal-backdrop" onClick={() => setPendingRevert(null)}>
+          <div className="modal revert-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Revert this exchange?</h2>
+            <p className="hint">
+              {pendingRevert.files.length > 0
+                ? `This will undo the changes made to ${pendingRevert.files.length} file(s) in this conversation:`
+                : 'This will discard this exchange from the conversation.'}
+            </p>
+            {pendingRevert.files.length > 0 && (
+              <div className="revert-file-list">
+                {pendingRevert.files.slice(0, 8).map((f) => (
+                  <div key={f} className="revert-file">
+                    {f}
+                  </div>
+                ))}
+                {pendingRevert.files.length > 8 && (
+                  <div className="revert-file more">… and {pendingRevert.files.length - 8} more</div>
+                )}
+              </div>
+            )}
+            <p className="hint">Your original message will be restored in the input box as unsent text, so you can edit and resend it.</p>
+            <div className="modal-actions">
+              <button className="btn" onClick={() => setPendingRevert(null)}>
+                Cancel
+              </button>
+              <button className="btn danger" onClick={() => void confirmRevert()}>
+                Revert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

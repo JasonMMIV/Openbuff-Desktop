@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+openbuff-src/
+
+# Build and distribution outputs
+out/
+dist/
+build/
+.vite/
+.cache/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS & Editor generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.vscode/
+.idea/
+
+# Local cache & session states
+.freebuff/
+.omx/
+*.tmp
+*.temp
+window-state.json
+*.checkpoint.json
+
+# Sensitive & API Key files (CRITICAL: NEVER COMMIT)
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.cert
+*.pfx
+*.p12
+credentials.json
+token.json
+openbuff.json
+
+# Planning and Assessment documents
+OpenBuff-Windows-App-*.md
+*可行性評估*.md
+*計畫書*.md
+*計劃書*.md
+
+# Test & Verification files
+demo-project/
+scripts/
