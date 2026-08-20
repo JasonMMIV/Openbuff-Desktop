@@ -1203,6 +1203,20 @@ textarea {
   background: transparent;
 }
 
+.btn.accent {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+:root[data-theme='light'] .btn.accent {
+  color: #000;
+}
+
+.btn.accent:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 60%, var(--accent));
+}
+
 .btn.warn {
   background: var(--yellow-soft);
   border-color: rgba(229, 181, 103, 0.4);

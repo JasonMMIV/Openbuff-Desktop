@@ -804,7 +804,7 @@ export default function SettingsModal({
                   <span>Project & Home Agents</span>
                   <div className="settings-section-actions">
                     <button
-                      className="btn primary small"
+                      className="btn ghost small"
                       onClick={onCreateAgent}
                       title="Create a custom agent with the /init wizard"
                     >
@@ -828,7 +828,7 @@ export default function SettingsModal({
                 {localAgents.length === 0 && !loadingAgents ? (
                   <div className="settings-empty-card">
                     <p>No custom agents found in <code>.agents/</code>.</p>
-                    <button className="btn primary small" onClick={onCreateAgent}>
+                    <button className="btn accent small" onClick={onCreateAgent}>
                       <PlusIcon size={12} /> Create Custom Agent
                     </button>
                   </div>
@@ -863,7 +863,7 @@ export default function SettingsModal({
               <button className="btn" onClick={onClose} disabled={saving}>
                 Cancel
               </button>
-              <button className="btn primary" onClick={save} disabled={saving}>
+              <button className="btn accent" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Save Changes'}
               </button>
             </div>
