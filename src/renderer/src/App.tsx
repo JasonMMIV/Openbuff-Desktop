@@ -4,7 +4,7 @@ import RightPanel, { type RightTab } from './components/RightPanel'
 import SettingsModal from './components/SettingsModal'
 import AgentWizardModal from './components/AgentWizardModal'
 import Composer, { type Attachment, type SkillInfo } from './components/Composer'
-import { AssistantBubble, ToolCard, UserBubble, type ToolItem } from './components/ChatMessage'
+import { AssistantBubble, TodoCard, ToolCard, UserBubble, type TodoTodo, type ToolItem } from './components/ChatMessage'
 import {
   AlertCircleIcon,
   AppIcon,
@@ -298,6 +298,8 @@ export default function App() {
   /** Set when the last run failed (stopped, API error, timeout) but its state was preserved. */
   const [resumeInfo, setResumeInfo] = useState<{ prompt: string; reason?: string; errorMessage?: string } | null>(null)
   const [approvalRequest, setApprovalRequest] = useState<{ message: string; raw?: unknown } | null>(null)
+  const [activeTodos, setActiveTodos] = useState<TodoTodo[]>([])
+  const [todoPanelCollapsed, setTodoPanelCollapsed] = useState(false)
 
   const previousRunRef = useRef<unknown>(null)
   const streamRef = useRef('')
@@ -553,6 +555,9 @@ export default function App() {
           agentType: event.agentType,
           todos: event.toolName === 'write_todos' && Array.isArray(event.todos) ? event.todos : undefined
         }
+        if (event.toolName === 'write_todos' && Array.isArray(event.todos)) {
+          setActiveTodos(event.todos)
+        }
         toolIndexRef.current = chatItemsRef.current.length
         setChatItems((prev) => [...prev, { kind: 'tool', tool }])
         return
@@ -593,9 +598,12 @@ export default function App() {
         return
       }
 
-      if (event.type === 'finish' && typeof event.totalCost === 'number') {
-        const cost = event.totalCost
-        setTotalCost((c) => c + cost)
+      if (event.type === 'finish') {
+        setActiveTodos([])
+        if (typeof event.totalCost === 'number') {
+          const cost = event.totalCost
+          setTotalCost((c) => c + cost)
+        }
       }
 
       if (event.type === 'approval_request') {
@@ -1724,6 +1732,12 @@ export default function App() {
                 >
                   Deny
                 </button>
+              </div>
+            )}
+
+            {activeTodos.length > 0 && running && (
+              <div className="todo-panel-dock">
+                <TodoCard todos={activeTodos} collapsed={todoPanelCollapsed} onToggleCollapse={() => setTodoPanelCollapsed((c) => !c)} />
               </div>
             )}
 

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
-import { ChevronIcon, CopyIcon, LightbulbIcon, TriangleIcon, UndoIcon } from './Icons'
+import { ChevronIcon, ChevronDownIcon, CopyIcon, LightbulbIcon, ListIcon, TriangleIcon, UndoIcon } from './Icons'
 
 export interface TodoTodo {
   task: string
@@ -200,26 +200,29 @@ function formatToolDetail(detail: string): string {
 }
 
 /** Render a todo checklist from a list of TodoTodo items. */
-export function TodoCard({ todos }: { todos: TodoTodo[] }) {
+export function TodoCard({ todos, collapsed, onToggleCollapse }: { todos: TodoTodo[]; collapsed?: boolean; onToggleCollapse?: () => void }) {
   if (!todos || todos.length === 0) return null
   const done = todos.filter((t) => t.completed).length
   return (
-    <div className="todo-card">
-      <div className="todo-header">
-        <span className="todo-icon">☑</span>
-        <span className="todo-title">Task list</span>
+    <div className={`todo-card${collapsed ? ' collapsed' : ''}`}>
+      <div className="todo-header" onClick={onToggleCollapse} style={onToggleCollapse ? { cursor: 'pointer' } : undefined}>
+        <span className="todo-list-icon"><ListIcon size={16} /></span>
+        <span className="todo-title">To-dos</span>
         <span className="todo-progress">{done}/{todos.length}</span>
+        {onToggleCollapse && <span className="todo-toggle"><ChevronDownIcon size={14} className={collapsed ? 'todo-chevron-collapsed' : ''} /></span>}
       </div>
-      <ul className="todo-list">
-        {todos.map((item, i) => (
-          <li key={i} className={`todo-item${item.completed ? ' done' : ''}`}>
-            <span className="todo-check">
-              {item.completed ? '✓' : '○'}
-            </span>
-            <span className="todo-text">{item.task}</span>
-          </li>
-        ))}
-      </ul>
+      {!collapsed && (
+        <ul className="todo-list">
+          {todos.map((item, i) => (
+            <li key={i} className={`todo-item${item.completed ? ' done' : ''}`}>
+              <span className="todo-check">
+                {item.completed ? '✓' : '○'}
+              </span>
+              <span className="todo-text">{item.task}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

@@ -1809,16 +1809,26 @@ textarea {
   margin: 0 var(--space-2);
 }
 
+.todo-card.collapsed .todo-header {
+  margin-bottom: 0;
+}
+
 .todo-header {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
+  padding: 2px 0;
 }
 
-.todo-icon {
-  font-size: 14px;
-  color: var(--green);
+.todo-header:hover {
+  opacity: 0.85;
+}
+
+.todo-list-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-2);
 }
 
 .todo-title {
@@ -1828,9 +1838,29 @@ textarea {
 }
 
 .todo-progress {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-2);
+  margin-left: 2px;
+}
+
+.todo-toggle {
+  display: flex;
+  align-items: center;
   margin-left: auto;
+  color: var(--text-2);
+}
+
+.todo-toggle:hover {
+  color: var(--text-0);
+}
+
+.todo-chevron-collapsed {
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.todo-toggle svg:not(.todo-chevron-collapsed) {
+  transition: transform 0.15s ease;
 }
 
 .todo-list {
@@ -1869,6 +1899,25 @@ textarea {
 
 .todo-item:not(.done) .todo-check {
   color: var(--text-2);
+}
+
+/* ─── Docked TodoPanel (above composer) ─────────────── */
+.todo-panel-dock {
+  margin: 0 max(var(--space-6), calc((100% - 760px) / 2));
+  border-top: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated, var(--bg-1));
+  animation: slideUp 0.2s ease-out;
+  transition: padding 0.2s ease;
+}
+
+.todo-panel-dock:has(.todo-card.collapsed) {
+  padding: var(--space-2) var(--space-4);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ─── Composer ───────────────────────────────────────── */
