@@ -852,6 +852,15 @@ textarea {
   padding: 7px 16px;
   cursor: pointer;
   font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.notice.warning {
+  background: var(--yellow-soft);
+  border-bottom: 1px solid rgba(229, 181, 103, 0.3);
+  color: var(--yellow);
 }
 
 /* ─── Welcome ────────────────────────────────────────── */

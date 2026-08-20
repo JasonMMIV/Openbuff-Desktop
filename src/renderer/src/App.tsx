@@ -832,6 +832,7 @@ export default function App() {
       setRunning(false)
       setStopping(false)
       setApprovalRequest(null)
+      setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
       // Persist the finished conversation transcript + SDK run state to the task's own files
       if (!IS_PREVIEW) {
         const taskId = currentTaskRef.current
@@ -856,7 +857,7 @@ export default function App() {
   const stop = useCallback(() => {
     setApprovalRequest(null)
     setStopping(true)
-    setChatItems((prev) => [...prev, { kind: 'system', text: 'Stop requested. Waiting for agent to safely halt...' }])
+    setNotice('⚠ Stop requested. Waiting for agent to safely halt...')
     if (!IS_PREVIEW) void window.openbuff.abort()
   }, [])
 
@@ -896,6 +897,7 @@ export default function App() {
     } finally {
       setRunning(false)
       setStopping(false)
+      setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
       const taskId = currentTaskRef.current
       if (taskId) {
         setTimeout(() => {
@@ -1519,7 +1521,10 @@ export default function App() {
         </header>
 
         {notice && (
-          <div className="notice" onClick={() => setNotice(null)}>
+          <div
+            className={`notice ${notice.includes('⚠') || notice.toLowerCase().includes('stop') ? 'warning' : ''}`}
+            onClick={() => setNotice(null)}
+          >
             {notice}
           </div>
         )}
@@ -1600,7 +1605,10 @@ export default function App() {
                 }
                 if (
                   item.text.includes('suggest_followups already ended') ||
-                  item.text.includes('No more non-terminal tools are available after followups')
+                  item.text.includes('No more non-terminal tools are available after followups') ||
+                  item.text.includes('Invalid parameters for') ||
+                  item.text.includes('Raw validation issues:') ||
+                  item.text.includes('Stop requested. Waiting for agent to safely halt')
                 ) {
                   return null
                 }
