@@ -2,16 +2,20 @@
 :root {
   color-scheme: dark;
   
-  /* 基礎背景色 */
-  --bg-0: #0b0d12;
-  --bg-1: #10131a;
-  --bg-2: #151923;
-  --bg-3: #1b202c;
-  --bg-hover: #232a3a;
+  /* 色相與飽和度基準 (Default: Slate Blue) */
+  --theme-hue: 223;
+  --theme-sat: 24%;
+  
+  /* 基礎背景色 (HSL 動態運算) */
+  --bg-0: hsl(var(--theme-hue), var(--theme-sat), 6%);
+  --bg-1: hsl(var(--theme-hue), var(--theme-sat), 8%);
+  --bg-2: hsl(var(--theme-hue), var(--theme-sat), 11%);
+  --bg-3: hsl(var(--theme-hue), var(--theme-sat), 14%);
+  --bg-hover: hsl(var(--theme-hue), 25%, 18%);
   
   /* 邊框色 */
-  --border: #242b3a;
-  --border-strong: #2f3850;
+  --border: hsl(var(--theme-hue), 23%, 18%);
+  --border-strong: hsl(var(--theme-hue), 26%, 25%);
   
   /* 文字色 - 確保 WCAG AA 對比度 */
   --text-0: #e8eaf0;      /* 主要文字 */
@@ -44,7 +48,7 @@
   --shadow-lg: rgba(0, 0, 0, 0.6);
   
   /* 程式碼背景 */
-  --code-bg: #0d1017;
+  --code-bg: hsl(var(--theme-hue), 24%, 7%);
   
   /* 圓角 */
   --radius: 10px;
@@ -81,16 +85,20 @@
 :root[data-theme='light'] {
   color-scheme: light;
   
+  /* 色相與飽和度基準 (Default: Slate Blue) */
+  --theme-hue: 220;
+  --theme-sat: 24%;
+  
   /* 基礎背景色 */
-  --bg-0: #f6f7f9;
+  --bg-0: hsl(var(--theme-hue), 23%, 97%);
   --bg-1: #ffffff;
-  --bg-2: #f2f4f8;
-  --bg-3: #e9edf3;
-  --bg-hover: #dfe5ee;
+  --bg-2: hsl(var(--theme-hue), 33%, 96%);
+  --bg-3: hsl(var(--theme-hue), 33%, 93%);
+  --bg-hover: hsl(var(--theme-hue), 33%, 90%);
   
   /* 邊框色 */
-  --border: #dce2ea;
-  --border-strong: #c3ccd9;
+  --border: hsl(var(--theme-hue), 30%, 89%);
+  --border-strong: hsl(var(--theme-hue), 24%, 81%);
   
   /* 文字色 - 確保 WCAG AA 對比度 */
   --text-0: #1c2330;      /* 主要文字 */
@@ -123,7 +131,117 @@
   --shadow-lg: rgba(30, 40, 60, 0.2);
   
   /* 程式碼背景 */
-  --code-bg: #f4f6fa;
+  --code-bg: hsl(var(--theme-hue), 25%, 97%);
+}
+
+/* ─── Color Themes Overrides ─────────────────────────── */
+
+/* 1. Obsidian Black (純黑高對比) */
+:root[data-color-theme='black'] {
+  --theme-hue: 0;
+  --theme-sat: 0%;
+  --bg-0: #000000;
+  --bg-1: #09090b;
+  --bg-2: #121215;
+  --bg-3: #18181b;
+  --bg-hover: #27272a;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --text-0: #fafafa;
+  --text-1: #a1a1aa;
+  --text-2: #71717a;
+  --accent: #f4f4f5;
+  --accent-strong: #ffffff;
+  --accent-soft: rgba(244, 244, 245, 0.12);
+  --code-bg: #050507;
+}
+
+:root[data-theme='light'][data-color-theme='black'] {
+  --theme-hue: 0;
+  --theme-sat: 0%;
+  --bg-0: #f4f4f5;
+  --bg-1: #ffffff;
+  --bg-2: #ececee;
+  --bg-3: #e4e4e7;
+  --bg-hover: #e4e4e7;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --text-0: #09090b;
+  --text-1: #52525b;
+  --text-2: #71717a;
+  --accent: #18181b;
+  --accent-strong: #09090b;
+  --accent-soft: rgba(24, 24, 27, 0.08);
+  --code-bg: #f4f4f5;
+}
+
+/* 2. Neutral Grey (中性灰) */
+:root[data-color-theme='grey'] {
+  --theme-hue: 240;
+  --theme-sat: 3%;
+  --accent: #a1a1aa;
+  --accent-strong: #d4d4d8;
+  --accent-soft: rgba(161, 161, 170, 0.14);
+}
+
+:root[data-theme='light'][data-color-theme='grey'] {
+  --theme-hue: 240;
+  --theme-sat: 3%;
+  --accent: #52525b;
+  --accent-strong: #3f3f46;
+  --accent-soft: rgba(82, 82, 91, 0.1);
+}
+
+
+/* 4. Vermillion (朱紅) */
+:root[data-color-theme='vermillion'] {
+  --theme-hue: 4;
+  --theme-sat: 24%;
+  --accent: #f87171;
+  --accent-strong: #ef4444;
+  --accent-soft: rgba(239, 68, 68, 0.15);
+}
+
+:root[data-theme='light'][data-color-theme='vermillion'] {
+  --theme-hue: 4;
+  --theme-sat: 28%;
+  --accent: #dc2626;
+  --accent-strong: #b91c1c;
+  --accent-soft: rgba(220, 38, 38, 0.1);
+}
+
+/* 5. Amber (琥珀金) */
+:root[data-color-theme='amber'] {
+  --theme-hue: 38;
+  --theme-sat: 25%;
+  --accent: #fbbf24;
+  --accent-strong: #f59e0b;
+  --accent-soft: rgba(245, 158, 11, 0.15);
+}
+
+:root[data-theme='light'][data-color-theme='amber'] {
+  --theme-hue: 38;
+  --theme-sat: 30%;
+  --accent: #d97706;
+  --accent-strong: #b45309;
+  --accent-soft: rgba(217, 119, 6, 0.1);
+}
+
+/* 6. Teal (藍綠) */
+:root[data-color-theme='teal'] {
+  --theme-hue: 175;
+  --theme-sat: 24%;
+  --accent: #2dd4bf;
+  --accent-strong: #14b8a6;
+  --accent-soft: rgba(20, 184, 166, 0.15);
+}
+
+:root[data-theme='light'][data-color-theme='teal'] {
+  --theme-hue: 175;
+  --theme-sat: 28%;
+  --accent: #0d9488;
+  --accent-strong: #0f766e;
+  --accent-soft: rgba(13, 148, 136, 0.1);
 }
 
 /* ─── Syntax highlighting (custom, dual-theme) ───────── */
@@ -755,6 +873,7 @@ textarea {
   min-width: 0;
   min-height: 0;
   background: var(--bg-1);
+  position: relative;
 }
 
 .topbar {
@@ -1131,22 +1250,61 @@ textarea {
 }
 
 /* ─── Notice ─────────────────────────────────────────── */
-.notice {
-  background: var(--green-soft);
-  border-bottom: 1px solid rgba(76, 195, 138, 0.3);
-  color: var(--green);
+.notice-toast {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-16px);
+  opacity: 0;
+  animation: toast-in 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  
+  background: var(--bg-1);
+  border: 1px solid var(--border-strong);
+  color: var(--text-0);
+  box-shadow: var(--shadow-lg);
   padding: 7px 16px;
-  cursor: pointer;
+  border-radius: 30px;
   font-size: 13px;
+  font-weight: 500;
   display: flex;
   align-items: center;
   gap: 8px;
+  z-index: 100;
+  cursor: pointer;
+  user-select: none;
+  backdrop-filter: blur(12px);
+  transition: transform 0.15s ease, opacity 0.15s ease;
 }
 
-.notice.warning {
-  background: var(--yellow-soft);
-  border-bottom: 1px solid rgba(229, 181, 103, 0.3);
+.notice-toast:hover {
+  transform: translateX(-50%) translateY(0) scale(1.02);
+}
+
+.notice-toast-icon {
+  flex-shrink: 0;
+}
+
+.notice-toast-icon.success {
+  color: var(--green);
+}
+
+.notice-toast-icon.warning {
   color: var(--yellow);
+}
+
+.notice-toast-icon.info {
+  color: var(--accent);
+}
+
+.notice-toast.warning {
+  border-color: var(--yellow);
+}
+
+@keyframes toast-in {
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 /* ─── Welcome ────────────────────────────────────────── */
@@ -2760,7 +2918,7 @@ select option {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
   overflow: hidden;
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--border-strong);
   border-radius: 16px;
   box-shadow: 0 24px 70px var(--shadow);
@@ -2875,7 +3033,7 @@ select option {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-2);
+  background: var(--bg-1);
 }
 
 .settings-modal-header {
@@ -2997,7 +3155,7 @@ select option {
   align-items: center;
   justify-content: space-between;
   padding: 12px 14px;
-  background: var(--bg-1);
+  background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   margin-top: 4px;
@@ -3007,6 +3165,69 @@ select option {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* ─── Color Themes Picker ────────────────────────────── */
+.color-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.color-theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s ease;
+  color: var(--text-0);
+  font-family: inherit;
+}
+
+.color-theme-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.color-theme-card.active {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.color-theme-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.color-theme-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.color-theme-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-0);
+}
+
+.color-theme-desc {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.35;
 }
 
 .settings-empty-card {
@@ -3019,7 +3240,7 @@ select option {
   text-align: center;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
-  background: var(--bg-1);
+  background: var(--bg-2);
   color: var(--text-2);
   font-size: 13px;
 }
@@ -3068,7 +3289,7 @@ select option {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 13px 14px;
-  background: var(--bg-1);
+  background: var(--bg-2);
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -3272,7 +3493,7 @@ select option {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-1);
+  background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 6px 10px;

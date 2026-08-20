@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
+import type { ColorTheme } from '../App'
 import {
   ActivityIcon,
   MoonIcon,
+  PaletteIcon,
   PlusIcon,
   RefreshIcon,
   SettingsIcon,
@@ -13,7 +15,7 @@ import {
 import CustomSelect from './CustomSelect'
 
 type ProviderType = 'openai-compatible' | 'anthropic-compatible'
-type SettingsTab = 'providers' | 'general' | 'routing' | 'agents'
+type SettingsTab = 'providers' | 'general' | 'theme' | 'routing' | 'agents'
 
 interface ProviderDraft {
   id: string
@@ -30,7 +32,18 @@ interface Props {
   onSaved: (s: { hasProvider: boolean }) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
+  colorTheme: ColorTheme
+  onSelectColorTheme: (theme: ColorTheme) => void
 }
+
+const COLOR_THEMES: { id: ColorTheme; label: string; previewColor: string; description: string }[] = [
+  { id: 'default', label: 'Slate Blue', previewColor: '#7a9bf0', description: 'Desaturated classic slate blue with subtle cool undertones' },
+  { id: 'black', label: 'Obsidian Black', previewColor: '#f4f4f5', description: 'Monochrome pure black and white high-contrast theme' },
+  { id: 'grey', label: 'Neutral Grey', previewColor: '#a1a1aa', description: 'Balanced un-tinted neutral steel and zinc tones' },
+  { id: 'vermillion', label: 'Vermillion', previewColor: '#ef4444', description: 'Energetic crimson and scarlet with warm ruby-tinted undertones' },
+  { id: 'amber', label: 'Amber', previewColor: '#f59e0b', description: 'Warm amber gold with rich honey and terracotta undertones' },
+  { id: 'teal', label: 'Teal', previewColor: '#14b8a6', description: 'Clean modern cyan-teal with high-tech marine undertones' }
+]
 
 const REASONING_OPTIONS = ['default', 'high', 'medium', 'low', 'minimal', 'none']
 
@@ -63,7 +76,15 @@ function urlError(url: string): string | null {
   }
 }
 
-export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, onToggleTheme }: Props) {
+export default function SettingsModal({
+  onClose,
+  onCreateAgent,
+  onSaved,
+  theme,
+  onToggleTheme,
+  colorTheme,
+  onSelectColorTheme
+}: Props) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('providers')
   const [providers, setProviders] = useState<ProviderDraft[]>([])
   const [providerHasKey, setProviderHasKey] = useState<Record<string, boolean>>({})
@@ -341,13 +362,17 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
     {
       id: 'providers',
       label: 'Providers & Models',
-      icon: <SparklesIcon size={16} />,
-      badge: providers.length
+      icon: <SparklesIcon size={16} />
     },
     {
       id: 'general',
       label: 'General',
       icon: <SettingsIcon size={16} />
+    },
+    {
+      id: 'theme',
+      label: 'Theme',
+      icon: <PaletteIcon size={16} />
     },
     {
       id: 'routing',
@@ -402,6 +427,7 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
               <h2>
                 {activeTab === 'providers' && 'Providers & Models'}
                 {activeTab === 'general' && 'General'}
+                {activeTab === 'theme' && 'Theme & Appearance'}
                 {activeTab === 'routing' && 'Agent Routing'}
                 {activeTab === 'agents' && 'Custom Agents'}
               </h2>
@@ -409,7 +435,9 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                 {activeTab === 'providers' &&
                   'Configure AI providers, base URLs, encrypted API keys, and available models.'}
                 {activeTab === 'general' &&
-                  'Set your default model, reasoning effort, tool approval mode, and UI theme.'}
+                  'Set your default model, reasoning effort, and tool approval mode.'}
+                {activeTab === 'theme' &&
+                  'Customize the appearance mode and color scheme palette of OpenBuff.'}
                 {activeTab === 'routing' &&
                   'Route specific agent roles to different models and customize reasoning effort per agent.'}
                 {activeTab === 'agents' &&
@@ -599,10 +627,15 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                   />
                   <p className="hint">Determines when OpenBuff requires confirmation before modifying files or running commands.</p>
                 </div>
+              </div>
+            )}
 
+            {/* 3. Theme Tab */}
+            {activeTab === 'theme' && (
+              <div className="settings-tab-content">
                 <div className="settings-field-group settings-theme-group">
                   <div className="settings-theme-info">
-                    <label className="settings-field-label">Appearance Theme</label>
+                    <label className="settings-field-label">Appearance Mode</label>
                     <p className="hint">Switch between Dark and Light interface themes.</p>
                   </div>
                   <button className="btn ghost small" onClick={onToggleTheme}>
@@ -610,10 +643,36 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                     {theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
                   </button>
                 </div>
+
+                <div className="settings-field-group">
+                  <label className="settings-field-label">Color Scheme</label>
+                  <p className="hint">
+                    Choose a color palette. Backgrounds and interface accents will adapt dynamically.
+                  </p>
+                  <div className="color-theme-grid">
+                    {COLOR_THEMES.map((ct) => (
+                      <button
+                        key={ct.id}
+                        type="button"
+                        className={`color-theme-card ${colorTheme === ct.id ? 'active' : ''}`}
+                        onClick={() => onSelectColorTheme(ct.id)}
+                      >
+                        <div className="color-theme-header">
+                          <span
+                            className="color-theme-swatch"
+                            style={{ backgroundColor: ct.previewColor }}
+                          />
+                          <span className="color-theme-name">{ct.label}</span>
+                        </div>
+                        <span className="color-theme-desc">{ct.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
 
-            {/* 3. Agent Routing Tab */}
+            {/* 4. Agent Routing Tab */}
             {activeTab === 'routing' && (
               <div className="settings-tab-content">
                 <div className="settings-section-head">

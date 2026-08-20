@@ -6,11 +6,14 @@ import AgentWizardModal from './components/AgentWizardModal'
 import Composer, { type Attachment, type SkillInfo } from './components/Composer'
 import { AssistantBubble, ToolCard, UserBubble, type ToolItem } from './components/ChatMessage'
 import {
+  AlertCircleIcon,
   AppIcon,
+  CheckCircleIcon,
   ChevronDownIcon,
   FolderIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  InfoIcon,
   PanelLeftIcon,
   PanelRightIcon
 } from './components/Icons'
@@ -244,10 +247,16 @@ function deriveStage(events: UiEvent[], running: boolean): string | null {
   return 'Working'
 }
 
+export type ColorTheme = 'default' | 'black' | 'grey' | 'vermillion' | 'amber' | 'teal'
+
 export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     const saved = localStorage.getItem('openbuff-theme')
     return saved === 'light' ? 'light' : 'dark'
+  })
+  const [colorTheme, setColorTheme] = useState<ColorTheme>(() => {
+    const saved = localStorage.getItem('openbuff-color-theme') as ColorTheme | null
+    return saved || 'default'
   })
   const [cwd, setCwd] = useState<string | null>(null)
   const [projectName, setProjectName] = useState('')
@@ -308,6 +317,22 @@ export default function App() {
     localStorage.setItem('openbuff-theme', theme)
     if (!IS_PREVIEW) window.openbuff.setTheme(theme)
   }, [theme])
+
+  // Color theme switch
+  useEffect(() => {
+    document.documentElement.dataset.colorTheme = colorTheme
+    localStorage.setItem('openbuff-color-theme', colorTheme)
+  }, [colorTheme])
+
+  // Auto-dismiss notice
+  useEffect(() => {
+    if (notice) {
+      const timer = setTimeout(() => {
+        setNotice(null)
+      }, 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [notice])
 
   // Close the project selector when clicking elsewhere
   useEffect(() => {
@@ -857,7 +882,7 @@ export default function App() {
   const stop = useCallback(() => {
     setApprovalRequest(null)
     setStopping(true)
-    setNotice('⚠ Stop requested. Waiting for agent to safely halt...')
+    setNotice('Stop requested. Waiting for agent to safely halt...')
     if (!IS_PREVIEW) void window.openbuff.abort()
   }, [])
 
@@ -1039,7 +1064,7 @@ export default function App() {
     (saved: { hasProvider: boolean }) => {
       setHasProvider(saved.hasProvider)
       setShowSettings(false)
-      setNotice('✓ Provider settings saved')
+      setNotice('Provider settings saved')
       if (!IS_PREVIEW) {
         void window.openbuff.getState().then((state) => {
           const s = (state as { settings: { activeModel: string; reasoningEffort: string; approvalMode: string; providers: { id: string; label: string; models: string[] }[] } }).settings
@@ -1520,14 +1545,27 @@ export default function App() {
           </div>
         </header>
 
-        {notice && (
-          <div
-            className={`notice ${notice.includes('⚠') || notice.toLowerCase().includes('stop') ? 'warning' : ''}`}
-            onClick={() => setNotice(null)}
-          >
-            {notice}
-          </div>
-        )}
+        {notice && (() => {
+          const lower = notice.toLowerCase()
+          const isWarning = lower.includes('stop') || lower.includes('failed') || lower.includes('error') || lower.includes('select a project')
+          const isSuccess = lower.includes('saved') || lower.includes('created') || lower.includes('accepted') || lower.includes('reverted')
+          return (
+            <div
+              className={`notice-toast ${isWarning ? 'warning' : isSuccess ? 'success' : 'info'}`}
+              onClick={() => setNotice(null)}
+              title="Click to dismiss"
+            >
+              {isWarning ? (
+                <AlertCircleIcon size={15} className="notice-toast-icon warning" />
+              ) : isSuccess ? (
+                <CheckCircleIcon size={15} className="notice-toast-icon success" />
+              ) : (
+                <InfoIcon size={15} className="notice-toast-icon info" />
+              )}
+              <span>{notice}</span>
+            </div>
+          )
+        })()}
 
         {!cwd ? (
           <div className="welcome">
@@ -1728,7 +1766,15 @@ export default function App() {
         />
 
       {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} onCreateAgent={openAgentWizard} onSaved={onSettingsSaved} theme={theme} onToggleTheme={toggleTheme} />
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
+          onCreateAgent={openAgentWizard}
+          onSaved={onSettingsSaved}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+          colorTheme={colorTheme}
+          onSelectColorTheme={setColorTheme}
+        />
       )}
 
       {showAgentWizard && cwd && (
