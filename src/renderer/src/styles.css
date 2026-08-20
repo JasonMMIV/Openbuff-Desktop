@@ -18,16 +18,16 @@
   --text-1: #aab2c2;      /* 次要文字 */
   --text-2: #707a8f;      /* 裝飾性文字 */
   
-  /* 主題色 - 柔和低飽和的板岩灰藍（與未發送狀態 Send 按鈕一致） */
-  --accent: #5e7fa8;
-  --accent-strong: #2e3c59;
-  --accent-soft: rgba(94, 127, 168, 0.15);
+  /* 主題色 - 柔和洗鍊的灰靛藍調 */
+  --accent: #7a9bf0;
+  --accent-strong: #5980df;
+  --accent-soft: rgba(122, 155, 240, 0.12);
   
   /* 功能性色彩 */
   --color-success: #4cc38a;
   --color-error: #ef6a6a;
   --color-warning: #e5b567;
-  --color-info: #5e7fa8;
+  --color-info: #7a9bf0;
   
   --green: #4cc38a;
   --green-soft: rgba(76, 195, 138, 0.12);
@@ -97,16 +97,16 @@
   --text-1: #4a5568;      /* 次要文字 */
   --text-2: #8a94a6;      /* 裝飾性文字 */
   
-  /* 主題色 - 柔和低飽和的板岩灰藍（與未發送狀態 Send 按鈕一致） */
-  --accent: #3b567d;
-  --accent-strong: #2c4263;
-  --accent-soft: rgba(59, 86, 125, 0.1);
+  /* 主題色 - 柔和洗鍊的灰靛藍調 */
+  --accent: #3867c2;
+  --accent-strong: #2b52a1;
+  --accent-soft: rgba(56, 103, 194, 0.09);
   
   /* 功能性色彩 */
   --color-success: #1f9d64;
   --color-error: #d64545;
   --color-warning: #b07a1e;
-  --color-info: #3b567d;
+  --color-info: #3867c2;
   
   --green: #1f9d64;
   --green-soft: rgba(31, 157, 100, 0.1);
@@ -1072,13 +1072,12 @@ textarea {
 
 .btn.primary {
   background: var(--accent-strong);
-  border: 1px solid rgba(94, 127, 168, 0.35);
+  border-color: transparent;
   color: #fff;
 }
 
 .btn.primary:hover:not(:disabled) {
   background: var(--accent);
-  border-color: transparent;
 }
 
 .btn.ghost {
