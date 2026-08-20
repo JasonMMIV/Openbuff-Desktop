@@ -2,11 +2,17 @@ import { useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
 import { ChevronIcon, CopyIcon, LightbulbIcon, TriangleIcon, UndoIcon } from './Icons'
 
+export interface TodoTodo {
+  task: string
+  completed: boolean
+}
+
 export interface ToolItem {
   toolName: string
   status: 'running' | 'done' | 'error'
   agentType?: string
   detail?: string
+  todos?: TodoTodo[]
 }
 
 function toolLabel(name: string): string {
@@ -193,14 +199,45 @@ function formatToolDetail(detail: string): string {
   return detail
 }
 
+/** Render a todo checklist from a list of TodoTodo items. */
+export function TodoCard({ todos }: { todos: TodoTodo[] }) {
+  if (!todos || todos.length === 0) return null
+  const done = todos.filter((t) => t.completed).length
+  return (
+    <div className="todo-card">
+      <div className="todo-header">
+        <span className="todo-icon">☑</span>
+        <span className="todo-title">Task list</span>
+        <span className="todo-progress">{done}/{todos.length}</span>
+      </div>
+      <ul className="todo-list">
+        {todos.map((item, i) => (
+          <li key={i} className={`todo-item${item.completed ? ' done' : ''}`}>
+            <span className="todo-check">
+              {item.completed ? '✓' : '○'}
+            </span>
+            <span className="todo-text">{item.task}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) {
   const running = tool.status === 'running' && isLast
   // Collapsed by default; click the header to expand the output
   const [open, setOpen] = useState(false)
 
   const hasDetail = Boolean(tool.detail?.trim())
+  const hasTodos = tool.toolName === 'write_todos' && Array.isArray(tool.todos) && tool.todos.length > 0
   const webResults = hasDetail && isSearchTool(tool.toolName) ? parseWebResults(tool.detail ?? '') : null
-  const formattedDetail = hasDetail && !webResults ? formatToolDetail(tool.detail ?? '') : null
+  const formattedDetail = hasDetail && !webResults && !hasTodos ? formatToolDetail(tool.detail ?? '') : null
+
+  // For write_todos: show a summary in the header and render the checklist inline
+  const todoSummary = hasTodos
+    ? `${tool.todos!.filter((t) => t.completed).length}/${tool.todos!.length} completed`
+    : ''
 
   return (
     <div className={`tool-card ${tool.status}${running ? ' running' : ''}`}>
@@ -214,10 +251,13 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
         )}
         <span className="tool-name">{toolLabel(tool.toolName)}</span>
         {tool.agentType && <span className="tool-agent">{tool.agentType}</span>}
+        {hasTodos && <span className="todo-summary-badge">{todoSummary}</span>}
         {tool.status === 'running' && <span className="tool-status-text">Running…</span>}
         {tool.status === 'error' && <span className="tool-status-text error">Failed</span>}
       </div>
-      {open && hasDetail && (
+      {hasTodos ? (
+        <TodoCard todos={tool.todos!} />
+      ) : open && hasDetail ? (
         <div className="tool-detail-wrap">
           {webResults ? (
             <div className="web-results">
@@ -240,7 +280,7 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
             <pre className="tool-detail">{formattedDetail}</pre>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   )
 }

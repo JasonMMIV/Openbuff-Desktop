@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer, webFrame } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import type { QueryIndexData, QueryIndexQuery } from '../shared/codebase-index'
 
+export interface TodoItem {
+  task: string
+  completed: boolean
+}
+
 export interface UiEvent {
   type: string
   text?: string
@@ -16,6 +21,7 @@ export interface UiEvent {
   totalCost?: number
   queryInput?: QueryIndexQuery
   queryIndex?: QueryIndexData
+  todos?: TodoItem[]
   raw?: unknown
 }
 

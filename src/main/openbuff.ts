@@ -12,6 +12,11 @@ import type { QueryIndexData, QueryIndexQuery, QueryIndexResult } from '../share
  * - Stream chunks are forwarded live (assistant message text)
  */
 
+export interface TodoItem {
+  task: string
+  completed: boolean
+}
+
 export interface UiEvent {
   type: string
   text?: string
@@ -26,6 +31,7 @@ export interface UiEvent {
   totalCost?: number
   queryInput?: QueryIndexQuery
   queryIndex?: QueryIndexData
+  todos?: TodoItem[]
   raw?: unknown
 }
 
@@ -195,6 +201,17 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
           }
         }
         return base
+      }
+      if (base.toolName === 'write_todos' && e.input && typeof e.input === 'object') {
+        const input = e.input as Record<string, unknown>
+        if (Array.isArray(input.todos)) {
+          base.todos = (input.todos as Record<string, unknown>[])
+            .filter((item) => typeof item === 'object' && item !== null)
+            .map((item) => ({
+              task: String(item.task ?? ''),
+              completed: Boolean(item.completed)
+            }))
+        }
       }
       if (base.toolName === 'query_index') base.queryInput = normalizeQueryIndexInput(e.input)
       // Track files this run modifies so the UI can offer "revert changes up to this point".

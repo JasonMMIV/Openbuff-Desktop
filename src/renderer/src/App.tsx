@@ -547,7 +547,12 @@ export default function App() {
         if (isSilentTool(event.toolName)) {
           return
         }
-        const tool: ToolItem = { toolName: event.toolName ?? 'tool', status: 'running', agentType: event.agentType }
+        const tool: ToolItem = {
+          toolName: event.toolName ?? 'tool',
+          status: 'running',
+          agentType: event.agentType,
+          todos: event.toolName === 'write_todos' && Array.isArray(event.todos) ? event.todos : undefined
+        }
         toolIndexRef.current = chatItemsRef.current.length
         setChatItems((prev) => [...prev, { kind: 'tool', tool }])
         return
