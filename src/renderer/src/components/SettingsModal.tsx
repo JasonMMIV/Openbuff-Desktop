@@ -10,6 +10,7 @@ import {
   SunIcon,
   XIcon
 } from './Icons'
+import CustomSelect from './CustomSelect'
 
 type ProviderType = 'openai-compatible' | 'anthropic-compatible'
 type SettingsTab = 'providers' | 'general' | 'routing' | 'agents'
@@ -450,13 +451,15 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                             onChange={(e) => updateProvider(p.id, { label: e.target.value })}
                             placeholder="Provider name"
                           />
-                          <select
+                          <CustomSelect
                             value={p.type}
-                            onChange={(e) => updateProvider(p.id, { type: e.target.value as ProviderType })}
-                          >
-                            <option value="openai-compatible">OpenAI Compatible</option>
-                            <option value="anthropic-compatible">Anthropic Compatible</option>
-                          </select>
+                            onChange={(val) => updateProvider(p.id, { type: val as ProviderType })}
+                            size="small"
+                            options={[
+                              { value: 'openai-compatible', label: 'OpenAI Compatible' },
+                              { value: 'anthropic-compatible', label: 'Anthropic Compatible' }
+                            ]}
+                          />
                         </div>
                         <button
                           className="mini-btn"
@@ -553,43 +556,47 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
               <div className="settings-tab-content">
                 <div className="settings-field-group">
                   <label className="settings-field-label">Default Model</label>
-                  <select value={activeModel} onChange={(e) => setActiveModel(e.target.value)}>
-                    {providers.map((p) =>
-                      p.models.map((m) => (
-                        <option key={`${p.id}/${m}`} value={`${p.id}/${m}`}>
-                          {p.label} / {m}
-                        </option>
-                      ))
+                  <CustomSelect
+                    value={activeModel}
+                    onChange={setActiveModel}
+                    fullWidth
+                    placeholder={providers.every((p) => p.models.length === 0) ? 'Add models to a provider first' : 'Select default model'}
+                    options={providers.flatMap((p) =>
+                      p.models.map((m) => ({
+                        value: `${p.id}/${m}`,
+                        label: `${p.label} / ${m}`
+                      }))
                     )}
-                    {providers.every((p) => p.models.length === 0) && (
-                      <option value="">Add models to a provider first</option>
-                    )}
-                  </select>
+                  />
                   <p className="hint">Used for primary reasoning and all agents without custom routing rules.</p>
                 </div>
 
                 <div className="settings-field-group">
                   <label className="settings-field-label">Reasoning Level</label>
-                  <select value={reasoningEffort} onChange={(e) => setReasoningEffort(e.target.value)}>
-                    {REASONING_OPTIONS.map((r) => (
-                      <option key={r} value={r}>
-                        {r === 'default' ? 'auto (model default)' : r}
-                      </option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    value={reasoningEffort}
+                    onChange={setReasoningEffort}
+                    fullWidth
+                    options={REASONING_OPTIONS.map((r) => ({
+                      value: r,
+                      label: r === 'default' ? 'auto (model default)' : r
+                    }))}
+                  />
                   <p className="hint">Controls extended thinking effort for models supporting reasoning tokens.</p>
                 </div>
 
                 <div className="settings-field-group">
                   <label className="settings-field-label">Approval Mode</label>
-                  <select
+                  <CustomSelect
                     value={approvalMode}
-                    onChange={(e) => setApprovalMode(e.target.value as typeof approvalMode)}
-                  >
-                    <option value="balanced">Balanced — high-impact actions require approval</option>
-                    <option value="strict">Strict — approve all changes</option>
-                    <option value="allow-all">Allow all — auto-approve everything</option>
-                  </select>
+                    onChange={(val) => setApprovalMode(val as typeof approvalMode)}
+                    fullWidth
+                    options={[
+                      { value: 'balanced', label: 'Balanced — high-impact actions require approval' },
+                      { value: 'strict', label: 'Strict — approve all changes' },
+                      { value: 'allow-all', label: 'Allow all — auto-approve everything' }
+                    ]}
+                  />
                   <p className="hint">Determines when OpenBuff requires confirmation before modifying files or running commands.</p>
                 </div>
 
@@ -627,43 +634,41 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                         <span className="route-agent" title={agentId}>
                           {agentId}
                         </span>
-                        <select
+                        <CustomSelect
                           value={route.model}
-                          onChange={(e) =>
+                          onChange={(val) =>
                             setAgentRouting((prev) => ({
                               ...prev,
-                              [agentId]: { ...prev[agentId], model: e.target.value }
+                              [agentId]: { ...prev[agentId], model: val }
                             }))
                           }
+                          size="small"
+                          placeholder={providers.every((p) => p.models.length === 0) ? 'Add models to a provider first' : 'Select model'}
+                          options={providers.flatMap((p) =>
+                            p.models.map((m) => ({
+                              value: `${p.id}/${m}`,
+                              label: `${p.label} / ${m}`
+                            }))
+                          )}
                           title="Model for this agent"
-                        >
-                          {providers.map((p) =>
-                            p.models.map((m) => (
-                              <option key={`${p.id}/${m}`} value={`${p.id}/${m}`}>
-                                {p.label} / {m}
-                              </option>
-                            ))
-                          )}
-                          {providers.every((p) => p.models.length === 0) && (
-                            <option value="">Add models to a provider first</option>
-                          )}
-                        </select>
-                        <select
+                          className="flex-1"
+                        />
+                        <CustomSelect
                           value={route.reasoningEffort}
-                          onChange={(e) =>
+                          onChange={(val) =>
                             setAgentRouting((prev) => ({
                               ...prev,
-                              [agentId]: { ...prev[agentId], reasoningEffort: e.target.value }
+                              [agentId]: { ...prev[agentId], reasoningEffort: val }
                             }))
                           }
+                          size="small"
+                          options={REASONING_OPTIONS.map((r) => ({
+                            value: r,
+                            label: r === 'default' ? 'auto' : r
+                          }))}
                           title="Reasoning effort for this agent"
-                        >
-                          {REASONING_OPTIONS.map((r) => (
-                            <option key={r} value={r}>
-                              {r === 'default' ? 'auto' : r}
-                            </option>
-                          ))}
-                        </select>
+                          className="flex-1"
+                        />
                         <button
                           className="mini-btn danger"
                           onClick={() => {
@@ -686,36 +691,35 @@ export default function SettingsModal({ onClose, onCreateAgent, onSaved, theme, 
                   <span>Add Route Rule</span>
                 </div>
                 <div className="route-add-row">
-                  <select
+                  <CustomSelect
                     value={routeDraftAgent}
-                    onChange={(e) => setRouteDraftAgent(e.target.value)}
-                    title="Agent to route"
-                  >
-                    <option value="">Select agent…</option>
-                    {allAgentIds
+                    onChange={setRouteDraftAgent}
+                    size="small"
+                    placeholder={allAgentIds.length === 0 ? 'No agents available' : 'Select agent…'}
+                    options={allAgentIds
                       .filter((id) => !(id in agentRouting))
-                      .map((id) => (
-                        <option key={id} value={id}>
-                          {id}
-                        </option>
-                      ))}
-                    {allAgentIds.length === 0 && <option value="">No agents available</option>}
-                  </select>
-                  <select
+                      .map((id) => ({
+                        value: id,
+                        label: id
+                      }))}
+                    title="Agent to route"
+                    className="flex-1"
+                  />
+                  <CustomSelect
                     value={routeDraftModel}
-                    onChange={(e) => setRouteDraftModel(e.target.value)}
-                    title="Model for this agent"
+                    onChange={setRouteDraftModel}
                     disabled={!routeDraftAgent}
-                  >
-                    <option value="">Model…</option>
-                    {providers.map((p) =>
-                      p.models.map((m) => (
-                        <option key={`${p.id}/${m}`} value={`${p.id}/${m}`}>
-                          {p.label} / {m}
-                        </option>
-                      ))
+                    size="small"
+                    placeholder="Model…"
+                    options={providers.flatMap((p) =>
+                      p.models.map((m) => ({
+                        value: `${p.id}/${m}`,
+                        label: `${p.label} / ${m}`
+                      }))
                     )}
-                  </select>
+                    title="Model for this agent"
+                    className="flex-1"
+                  />
                   <button
                     className="btn ghost small"
                     disabled={!routeDraftAgent || !routeDraftModel}

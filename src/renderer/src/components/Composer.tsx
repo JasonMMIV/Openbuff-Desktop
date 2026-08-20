@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUpIcon, ChevronDownIcon, GaugeIcon, LightbulbIcon, PaperclipIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
+import CustomSelect from './CustomSelect'
 
 export interface Attachment {
   path: string
@@ -378,32 +379,36 @@ export default function Composer(props: ComposerProps) {
             <PaperclipIcon size={13} /> Attach
           </button>
 
-          <div className="selector">
-            <SparklesIcon size={13} />
-            <select value={activeModel} onChange={(e) => onModelChange(e.target.value)} disabled={running} title="Model">
-              {providers.map((p) =>
-                p.models.map((m) => (
-                  <option key={`${p.id}/${m}`} value={`${p.id}/${m}`}>
-                    {p.label} / {m}
-                  </option>
-                ))
-              )}
-              {providers.length === 0 && <option value="">No provider configured</option>}
-            </select>
-            <ChevronDownIcon size={11} />
-          </div>
+          <CustomSelect
+            icon={<SparklesIcon size={13} />}
+            value={activeModel}
+            onChange={onModelChange}
+            disabled={running}
+            size="small"
+            placement="top"
+            placeholder={providers.length === 0 ? 'No provider configured' : 'Select model'}
+            options={providers.flatMap((p) =>
+              p.models.map((m) => ({
+                value: `${p.id}/${m}`,
+                label: `${p.label} / ${m}`
+              }))
+            )}
+            title="Model"
+          />
 
-          <div className="selector">
-            <LightbulbIcon size={13} />
-            <select value={reasoningEffort} onChange={(e) => onReasoningChange(e.target.value)} disabled={running} title="Reasoning level">
-              {REASONING_OPTIONS.map((r) => (
-                <option key={r} value={r}>
-                  {r === 'default' ? 'Reasoning: auto' : `Reasoning: ${r}`}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon size={11} />
-          </div>
+          <CustomSelect
+            icon={<LightbulbIcon size={13} />}
+            value={reasoningEffort}
+            onChange={onReasoningChange}
+            disabled={running}
+            size="small"
+            placement="top"
+            options={REASONING_OPTIONS.map((r) => ({
+              value: r,
+              label: r === 'default' ? 'Reasoning: auto' : `Reasoning: ${r}`
+            }))}
+            title="Reasoning level"
+          />
         </div>
 
         <div className="toolbar-right">
