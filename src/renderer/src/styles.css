@@ -380,25 +380,6 @@ textarea {
   font-size: inherit;
 }
 
-/* ─── 跳過連結 (無障礙) ──────────────────────────────── */
-.skip-link {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  background: var(--accent);
-  color: #fff;
-  padding: var(--space-2) var(--space-4);
-  z-index: 9999;
-  transition: top var(--transition-base);
-  text-decoration: none;
-  font-size: var(--text-sm);
-  border-radius: 0 0 var(--radius-sm) 0;
-}
-
-.skip-link:focus {
-  top: 0;
-}
-
 /* ─── App layout ─────────────────────────────────────── */
 .app {
   display: flex;
