@@ -21,6 +21,8 @@ export interface ProviderConfig {
   baseURL: string
   apiKeyEnv: string
   models: string[]
+  enableThinking?: boolean
+  customBody?: Record<string, unknown> | string
 }
 
 export interface TaskMessage {
@@ -349,12 +351,25 @@ export function writeProviderConfigFile(): string {
       }
     } else {
       const isLocal = /localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(p.baseURL)
+      let customBodyObj: Record<string, unknown> | undefined = undefined
+      if (typeof p.customBody === 'string' && p.customBody.trim()) {
+        try {
+          customBodyObj = JSON.parse(p.customBody)
+        } catch {
+          // ignore invalid JSON
+        }
+      } else if (p.customBody && typeof p.customBody === 'object') {
+        customBodyObj = p.customBody as Record<string, unknown>
+      }
+
       providers[p.id] = {
         type: 'openai-compatible',
         baseURL: p.baseURL,
         apiKeyEnv: p.apiKeyEnv,
         models: p.models,
         supportsStructuredOutputs: !isLocal,
+        ...(p.enableThinking !== undefined ? { enableThinking: p.enableThinking } : {}),
+        ...(customBodyObj ? { customBody: customBodyObj } : {}),
         ...(isLocal
           ? {
               compatibility: {

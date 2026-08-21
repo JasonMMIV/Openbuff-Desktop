@@ -27,6 +27,8 @@ interface ProviderDraft {
   baseURL: string
   apiKeyEnv: string
   models: string[]
+  enableThinking?: boolean
+  customBody?: string
 }
 
 interface ProviderPreset {
@@ -35,6 +37,7 @@ interface ProviderPreset {
   type: ProviderType
   apiKeyEnv: string
   description: string
+  enableThinking?: boolean
 }
 
 const PROVIDER_PRESETS: ProviderPreset[] = [
@@ -51,6 +54,14 @@ const PROVIDER_PRESETS: ProviderPreset[] = [
     type: 'anthropic-compatible',
     apiKeyEnv: 'ANTHROPIC_API_KEY',
     description: 'Claude Opus 4.5, Sonnet 4.5'
+  },
+  {
+    label: 'Alibaba Cloud (DashScope)',
+    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    type: 'openai-compatible',
+    apiKeyEnv: 'DASHSCOPE_API_KEY',
+    description: 'Qwen 2.5, DeepSeek-R1, QwQ (enable_thinking)',
+    enableThinking: true
   },
   {
     label: 'OpenRouter',
@@ -136,7 +147,7 @@ const COLOR_THEMES: { id: ColorTheme; label: string; previewColor: string; descr
   { id: 'teal', label: 'Teal', previewColor: '#14b8a6', description: 'Clean modern cyan-teal with high-tech marine undertones' }
 ]
 
-const REASONING_OPTIONS = ['default', 'high', 'medium', 'low', 'minimal', 'none']
+import { getReasoningOptionsForModel } from '../utils/reasoning'
 
 let draftSeq = 0
 function newProviderId(): string {
@@ -304,7 +315,9 @@ export default function SettingsModal({
           type: p.type,
           baseURL: p.baseURL.trim(),
           apiKeyEnv: p.apiKeyEnv || 'OPENBUFF_API_KEY',
-          models: p.models
+          models: p.models,
+          enableThinking: p.enableThinking,
+          customBody: p.customBody
         })),
         activeModel: finalModel,
         reasoningEffort,
@@ -332,7 +345,7 @@ export default function SettingsModal({
 
     const timer = setTimeout(() => {
       void saveState()
-    }, 450)
+    }, 400)
     return () => clearTimeout(timer)
   }, [saveState, isLoaded])
 
@@ -376,7 +389,8 @@ export default function SettingsModal({
       type: preset.type,
       baseURL: preset.baseURL,
       apiKeyEnv: preset.apiKeyEnv || 'OPENBUFF_API_KEY',
-      models: []
+      models: [],
+      enableThinking: preset.enableThinking
     }
     setProviders((prev) => [...prev, newP])
     setEditingProviderId(newId)
@@ -965,6 +979,56 @@ export default function SettingsModal({
                       </button>
                     </div>
                   </div>
+
+                  {/* Section 3: Advanced Parameters */}
+                  {selectedProvider.type === 'openai-compatible' && (
+                    <div className="provider-detail-section">
+                      <div className="provider-detail-section-head">
+                        <span className="provider-detail-section-title">Advanced Parameters</span>
+                      </div>
+
+                      <div className="settings-field-group">
+                        <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectedProvider.enableThinking ?? false}
+                            onChange={(e) => updateProvider(selectedProvider.id, { enableThinking: e.target.checked ? true : undefined })}
+                          />
+                          <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                            Enable Extended Thinking (<code style={{ fontSize: '12px', background: 'var(--bg-card)', padding: '2px 4px', borderRadius: '4px' }}>enable_thinking: true</code>)
+                          </span>
+                        </label>
+                        <p className="hint">
+                          Required by Alibaba Cloud DashScope (Qwen 2.5, DeepSeek-R1, QwQ) to stream reasoning / thought tokens over OpenAI-compatible endpoints.
+                        </p>
+                      </div>
+
+                      <div className="settings-field-group" style={{ marginTop: '14px' }}>
+                        <label className="settings-field-label">Custom Request Body (JSON)</label>
+                        <textarea
+                          rows={3}
+                          value={selectedProvider.customBody ?? ''}
+                          onChange={(e) => updateProvider(selectedProvider.id, { customBody: e.target.value })}
+                          placeholder='e.g. {"chat_template_args": {"enable_thinking": true}}'
+                          spellCheck={false}
+                          style={{
+                            width: '100%',
+                            fontFamily: 'monospace',
+                            fontSize: '12px',
+                            padding: '8px 10px',
+                            borderRadius: '6px',
+                            background: 'var(--bg-input, rgba(0,0,0,0.15))',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-primary)',
+                            resize: 'vertical'
+                          }}
+                        />
+                        <p className="hint">
+                          Optional JSON object merged directly into the request body for all requests to this provider.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -996,9 +1060,9 @@ export default function SettingsModal({
                   value={reasoningEffort}
                   onChange={setReasoningEffort}
                   fullWidth
-                  options={REASONING_OPTIONS.map((r) => ({
+                  options={getReasoningOptionsForModel(activeModel).map((r) => ({
                     value: r,
-                    label: r === 'default' ? 'auto (model default)' : r
+                    label: r === 'default' ? 'Default' : r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
                   }))}
                 />
                 <p className="hint">Controls extended thinking effort for models supporting reasoning tokens.</p>
@@ -1112,9 +1176,9 @@ export default function SettingsModal({
                           }))
                         }
                         size="small"
-                        options={REASONING_OPTIONS.map((r) => ({
+                        options={getReasoningOptionsForModel(route.model).map((r) => ({
                           value: r,
-                          label: r === 'default' ? 'auto' : r
+                          label: r === 'default' ? 'Default' : r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
                         }))}
                         title="Reasoning effort for this agent"
                         className="flex-1"

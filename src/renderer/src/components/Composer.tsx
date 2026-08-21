@@ -51,7 +51,7 @@ interface ComposerProps {
   focusSignal?: number
 }
 
-const REASONING_OPTIONS = ['default', 'high', 'medium', 'low', 'minimal', 'none']
+import { getReasoningOptionsForModel } from '../utils/reasoning'
 
 const SLASH_COMMANDS: { id: string; label: string; description: string }[] = [
   { id: 'new-task', label: 'new-task', description: 'Start a new task' },
@@ -403,9 +403,9 @@ export default function Composer(props: ComposerProps) {
             disabled={running}
             size="small"
             placement="top"
-            options={REASONING_OPTIONS.map((r) => ({
+            options={getReasoningOptionsForModel(activeModel).map((r) => ({
               value: r,
-              label: r === 'default' ? 'Auto' : r.charAt(0).toUpperCase() + r.slice(1)
+              label: r === 'default' ? 'Default' : r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
             }))}
             title="Reasoning level"
           />
