@@ -260,6 +260,17 @@ export function SparklesIcon(props: IconProps) {
   )
 }
 
+export function LayersIcon(props: IconProps) {
+  const b = base(props)
+  return (
+    <svg {...b} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 2 10 5-10 5-10-5Z" />
+      <path d="m2 12 10 5 10-5" />
+      <path d="m2 17 10 5 10-5" />
+    </svg>
+  )
+}
+
 export function RobotIcon(props: IconProps) {
   const b = base(props)
   return (

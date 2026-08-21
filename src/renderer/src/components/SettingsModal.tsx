@@ -3,6 +3,7 @@ import type { ColorTheme } from '../App'
 import {
   ActivityIcon,
   ChevronLeftIcon,
+  LayersIcon,
   MoonIcon,
   PaletteIcon,
   PlusIcon,
@@ -662,7 +663,7 @@ export default function SettingsModal({
                         onClick={() => setShowPresetPicker(true)}
                         title="Add from preset templates"
                       >
-                        <SparklesIcon size={13} /> Add from Preset
+                        <LayersIcon size={13} /> Add from Preset
                       </button>
                       <button
                         type="button"
@@ -680,7 +681,7 @@ export default function SettingsModal({
                       <p>No providers configured yet.</p>
                       <div className="settings-empty-actions">
                         <button type="button" className="btn accent small" onClick={() => setShowPresetPicker(true)}>
-                          <SparklesIcon size={13} /> Add from Preset
+                          <LayersIcon size={13} /> Add from Preset
                         </button>
                         <button type="button" className="btn ghost small" onClick={addProvider}>
                           <PlusIcon size={13} /> Add Custom Provider
@@ -1318,7 +1319,7 @@ export default function SettingsModal({
           <div className="preset-modal-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="preset-modal-header">
               <div className="preset-modal-title">
-                <SparklesIcon size={16} />
+                <LayersIcon size={16} />
                 <span>Choose Provider Preset</span>
               </div>
               <button
