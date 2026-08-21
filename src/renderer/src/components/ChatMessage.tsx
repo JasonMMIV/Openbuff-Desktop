@@ -231,6 +231,7 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
   const running = tool.status === 'running' && isLast
   // Collapsed by default; click the header to expand the output
   const [open, setOpen] = useState(false)
+  const [todoCollapsed, setTodoCollapsed] = useState(true)
 
   const hasDetail = Boolean(tool.detail?.trim())
   const hasTodos = tool.toolName === 'write_todos' && Array.isArray(tool.todos) && tool.todos.length > 0
@@ -259,7 +260,7 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
         {tool.status === 'error' && <span className="tool-status-text error">Failed</span>}
       </div>
       {hasTodos ? (
-        <TodoCard todos={tool.todos!} />
+        <TodoCard todos={tool.todos!} collapsed={todoCollapsed} onToggleCollapse={() => setTodoCollapsed((c) => !c)} />
       ) : open && hasDetail ? (
         <div className="tool-detail-wrap">
           {webResults ? (
