@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowUpIcon, ChevronDownIcon, GaugeIcon, LightbulbIcon, PaperclipIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
+import { ArrowUpIcon, LightbulbIcon, PlusIcon, SparklesIcon, StopIcon, XIcon } from './Icons'
 import CustomSelect from './CustomSelect'
 
 export interface Attachment {
@@ -260,6 +260,10 @@ export default function Composer(props: ComposerProps) {
       )}
 
       <div className="composer">
+        <button className="attach-btn" onClick={onAttachFiles} disabled={running} title="Attach files">
+          <PlusIcon size={16} />
+        </button>
+
         <textarea
           ref={textareaRef}
           value={prompt}
@@ -375,10 +379,6 @@ export default function Composer(props: ComposerProps) {
 
       <div className="composer-toolbar">
         <div className="toolbar-left">
-          <button className="toolbar-btn" onClick={onAttachFiles} disabled={running} title="Attach files">
-            <PaperclipIcon size={13} /> Attach
-          </button>
-
           <CustomSelect
             icon={<SparklesIcon size={13} />}
             value={activeModel}
@@ -405,7 +405,7 @@ export default function Composer(props: ComposerProps) {
             placement="top"
             options={REASONING_OPTIONS.map((r) => ({
               value: r,
-              label: r === 'default' ? 'Reasoning: auto' : `Reasoning: ${r}`
+              label: r === 'default' ? 'Auto' : r.charAt(0).toUpperCase() + r.slice(1)
             }))}
             title="Reasoning level"
           />

@@ -5,6 +5,7 @@ import {
   FolderOpenIcon,
   FolderPlusIcon,
   NotePenIcon,
+  PlusIcon,
   SearchIcon,
   SettingsIcon,
   TrashIcon
@@ -204,6 +205,17 @@ export default function Sidebar(props: SidebarProps) {
               >
                 {isOpen ? <FolderOpenIcon size={15} /> : <FolderIcon size={15} />}
                 <span className="project-name-text">{p.name}</span>
+                <button
+                  className="project-new-task-btn"
+                  title="New task"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    props.onOpenProject(p.path)
+                    props.onNewTask()
+                  }}
+                >
+                  <PlusIcon size={13} />
+                </button>
               </div>
               {isOpen && (
                 <div className="task-list">
