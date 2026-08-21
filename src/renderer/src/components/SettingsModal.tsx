@@ -85,7 +85,7 @@ export default function SettingsModal({
   colorTheme,
   onSelectColorTheme
 }: Props) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('providers')
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [providers, setProviders] = useState<ProviderDraft[]>([])
   const [providerHasKey, setProviderHasKey] = useState<Record<string, boolean>>({})
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
@@ -360,14 +360,14 @@ export default function SettingsModal({
 
   const NAV_ITEMS: { id: SettingsTab; label: string; icon: React.ReactNode; badge?: number | string }[] = [
     {
-      id: 'providers',
-      label: 'Providers & Models',
-      icon: <SparklesIcon size={16} />
-    },
-    {
       id: 'general',
       label: 'General',
       icon: <SettingsIcon size={16} />
+    },
+    {
+      id: 'providers',
+      label: 'Providers & Models',
+      icon: <SparklesIcon size={16} />
     },
     {
       id: 'theme',
