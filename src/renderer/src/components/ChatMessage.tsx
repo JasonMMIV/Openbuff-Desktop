@@ -200,17 +200,19 @@ function formatToolDetail(detail: string): string {
 }
 
 /** Render a todo checklist from a list of TodoTodo items. */
-export function TodoCard({ todos, collapsed, onToggleCollapse }: { todos: TodoTodo[]; collapsed?: boolean; onToggleCollapse?: () => void }) {
+export function TodoCard({ todos, collapsed, onToggleCollapse, inline }: { todos: TodoTodo[]; collapsed?: boolean; onToggleCollapse?: () => void; inline?: boolean }) {
   if (!todos || todos.length === 0) return null
   const done = todos.filter((t) => t.completed).length
   return (
-    <div className={`todo-card${collapsed ? ' collapsed' : ''}`}>
-      <div className="todo-header" onClick={onToggleCollapse} style={onToggleCollapse ? { cursor: 'pointer' } : undefined}>
-        <span className="todo-list-icon"><ListIcon size={16} /></span>
-        <span className="todo-title">To-dos</span>
-        <span className="todo-progress">{done}/{todos.length}</span>
-        {onToggleCollapse && <span className="todo-toggle"><ChevronDownIcon size={14} className={collapsed ? 'todo-chevron-collapsed' : ''} /></span>}
-      </div>
+    <div className={`todo-card${collapsed ? ' collapsed' : ''}`}> 
+      {!inline && (
+        <div className="todo-header" onClick={onToggleCollapse} style={onToggleCollapse ? { cursor: 'pointer' } : undefined}>
+          <span className="todo-list-icon"><ListIcon size={16} /></span>
+          <span className="todo-title">To-dos</span>
+          <span className="todo-progress">{done}/{todos.length}</span>
+          {onToggleCollapse && <span className="todo-toggle"><ChevronDownIcon size={14} className={collapsed ? 'todo-chevron-collapsed' : ''} /></span>}
+        </div>
+      )}
       {!collapsed && (
         <ul className="todo-list">
           {todos.map((item, i) => (
@@ -231,7 +233,6 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
   const running = tool.status === 'running' && isLast
   // Collapsed by default; click the header to expand the output
   const [open, setOpen] = useState(false)
-  const [todoCollapsed, setTodoCollapsed] = useState(true)
 
   const hasDetail = Boolean(tool.detail?.trim())
   const hasTodos = tool.toolName === 'write_todos' && Array.isArray(tool.todos) && tool.todos.length > 0
@@ -259,8 +260,8 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
         {tool.status === 'running' && <span className="tool-status-text">Running…</span>}
         {tool.status === 'error' && <span className="tool-status-text error">Failed</span>}
       </div>
-      {hasTodos ? (
-        <TodoCard todos={tool.todos!} collapsed={todoCollapsed} onToggleCollapse={() => setTodoCollapsed((c) => !c)} />
+      {hasTodos && open ? (
+        <TodoCard todos={tool.todos!} inline />
       ) : open && hasDetail ? (
         <div className="tool-detail-wrap">
           {webResults ? (
