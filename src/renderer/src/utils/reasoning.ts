@@ -18,17 +18,10 @@ export function getReasoningOptionsForModel(modelId: string | undefined): string
     return normalizedOpts
   }
 
-  // Fallback heuristic based on OmniChat's reasoning RegExp
-  const reasoningRegex = /(gpt-oss|gpt-5(?!-chat)|o\d|gemini-(?:2\.5|3).*|gemini-(?:flash-latest|pro-latest)|gemini-3-pro-image-preview|claude|qwen-?3|doubao.+1([-.])6|grok-4|kimi-k(?:2|3)|step-3|intern-s1|glm-4([-.])(?:5|6|7)|glm-5|minimax-m2|deepseek-(?:r1|v3\.1|v3\.2|v4)|deepseek-reasoner|mimo-v2-flash|hy3)/i
-
-  if (reasoningRegex.test(bareModel)) {
-    if (bareModel.toLowerCase().includes('grok')) {
-      return ['default', 'low', 'medium', 'high', 'max']
-    }
-    return ['default', 'low', 'medium', 'high']
-  }
-  
-  // General fallback for unknown models (e.g. Musespark, unknown open source models, etc.)
-  // Most generic open source models do not support the `reasoning_effort` parameter.
-  return ['default']
+  // General fallback for unknown models.
+  // OmniChat handles unknown reasoning models by providing standard effort levels (Auto, Light, Medium, Heavy),
+  // and relies on API capabilities or manual UI toggles to enable the reasoning feature.
+  // Since OpenBuff doesn't currently parse API capabilities or have a manual toggle,
+  // we provide the standard options to ensure users can configure effort for new reasoning models.
+  return ['default', 'low', 'medium', 'high']
 }
