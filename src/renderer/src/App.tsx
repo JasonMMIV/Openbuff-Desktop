@@ -1030,6 +1030,8 @@ export default function App() {
               ? { kind: 'tool', tool: item.tool }
               : item.kind === 'assistant'
               ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
+              : item.kind === 'file-changes'
+              ? { kind: 'file-changes', files: item.files }
               : { kind: item.kind, text: item.text }
           )
           void window.openbuff.saveTaskTranscript({ taskId, messages })
@@ -1160,15 +1162,29 @@ export default function App() {
     [openFileByPath]
   )
 
+  const handleCloseSettings = useCallback(() => {
+    setShowSettings(false)
+    if (!IS_PREVIEW) {
+      void window.openbuff.getState().then((state) => {
+        const s = (state as { settings: { activeModel: string; reasoningEffort: string; approvalMode: string; providers: { id: string; label: string; models: string[] }[]; hasProvider?: boolean } }).settings
+        if (s) {
+          setHasProvider(Boolean(s.hasProvider))
+          setSettings({ providers: s.providers, activeModel: s.activeModel, reasoningEffort: s.reasoningEffort, approvalMode: s.approvalMode })
+        }
+      })
+      refreshProjects()
+    }
+  }, [refreshProjects])
+
   const onSettingsSaved = useCallback(
     (saved: { hasProvider: boolean }) => {
       setHasProvider(saved.hasProvider)
-      setShowSettings(false)
-      setNotice('Provider settings saved')
       if (!IS_PREVIEW) {
         void window.openbuff.getState().then((state) => {
           const s = (state as { settings: { activeModel: string; reasoningEffort: string; approvalMode: string; providers: { id: string; label: string; models: string[] }[] } }).settings
-          setSettings({ providers: s.providers, activeModel: s.activeModel, reasoningEffort: s.reasoningEffort, approvalMode: s.approvalMode })
+          if (s) {
+            setSettings({ providers: s.providers, activeModel: s.activeModel, reasoningEffort: s.reasoningEffort, approvalMode: s.approvalMode })
+          }
         })
         refreshProjects()
       }
@@ -1606,350 +1622,352 @@ export default function App() {
         )}
       </header>
       <div className="app-body">
-      <Sidebar
-          open={leftOpen}
-          onNewTask={newTask}
-          searchOpen={searchOpen}
-          onToggleSearch={() => setSearchOpen((v) => !v)}
-          searchQuery={searchQuery}
-          onSearchQuery={setSearchQuery}
-          searchResults={searchResults}
-          onSearchJump={onSearchJump}
-          projects={projects}
-          onNewProject={() => void selectFolder()}
-          onOpenProject={(p) => void onOpenProject(p)}
-          onOpenTask={(p, t) => void onOpenTask(p, t)}
-          onRenameTask={onRenameTask}
-          onDeleteTask={onDeleteTask}
-          onRemoveProject={onRemoveProject}
-          onSettings={() => setShowSettings(true)}
-          currentProjectPath={cwd}
-        />
-
-      <main className="main">
-        <header className="topbar">
-          <div className="topbar-left">
-            <button
-              className="btn icon-only panel-toggle"
-              onClick={() => setLeftOpen((v) => !v)}
-              title={leftOpen ? 'Collapse sidebar' : 'Open sidebar'}
-            >
-              <PanelLeftIcon size={15} />
-            </button>
-            <div className="project-select" ref={projectMenuRef}>
-              <button
-                className={`project-name-btn${canSwitchProject ? '' : ' locked'}`}
-                onClick={canSwitchProject ? () => setProjectMenuOpen((v) => !v) : undefined}
-                title={canSwitchProject ? 'Choose project' : 'Project is locked while a conversation is active'}
-              >
-                {projectName ? <FolderIcon size={13} /> : <AppIcon size={14} />}
-                <span className="project-name">{projectName || 'OpenBuff Desktop'}</span>
-                {canSwitchProject && <ChevronDownIcon size={12} />}
-              </button>
-              {projectMenuOpen && canSwitchProject && (
-                <div className="project-menu">
-                  {projects.length === 0 && <div className="mention-empty">No projects yet</div>}
-                  {projects.slice(0, 15).map((p) => (
-                    <button
-                      key={p.path}
-                      className={`project-menu-item${p.path === cwd ? ' current' : ''}`}
-                      onClick={() => {
-                        setProjectMenuOpen(false)
-                        if (p.path !== cwd) void onOpenProject(p.path)
-                      }}
-                      title={p.path}
-                    >
-                      {p.path === cwd ? <FolderOpenIcon size={13} /> : <FolderIcon size={13} />}
-                      <span className="pm-name">{p.name}</span>
-                    </button>
-                  ))}
-                  {projects.length > 0 && <div className="project-menu-sep" />}
-                  <button
-                    className="project-menu-item add"
-                    onClick={() => {
-                      setProjectMenuOpen(false)
-                      void selectFolder()
-                    }}
-                  >
-                    <FolderPlusIcon size={13} />
-                    <span className="pm-name">Add Project…</span>
-                  </button>
-                </div>
-              )}
-            </div>
-            {branch && <span className="branch-badge">⎇ {branch}</span>}
-            {running && (
-              <span className="running-badge">
-                <span className="spinner-ring" /> {currentStage ?? 'Working'}
-              </span>
-            )}
-          </div>
-          <div className="topbar-right">
-            {!cwd && (
-              <button className="btn primary" onClick={() => void selectFolder()}>
-                <FolderIcon size={14} /> Select Folder
-              </button>
-            )}
-            {!hasProvider && (
-              <button className="btn warn" onClick={() => setShowSettings(true)}>
-                Set API Key
-              </button>
-            )}
-            <button
-              className="btn icon-only panel-toggle"
-              onClick={() => setRightOpen((v) => !v)}
-              title={rightOpen ? 'Collapse panel' : 'Open panel'}
-            >
-              <PanelRightIcon size={15} />
-            </button>
-          </div>
-        </header>
-
-        {notice && (() => {
-          const lower = notice.toLowerCase()
-          const isWarning = lower.includes('stop') || lower.includes('failed') || lower.includes('error') || lower.includes('select a project')
-          const isSuccess = lower.includes('saved') || lower.includes('created') || lower.includes('accepted') || lower.includes('reverted')
-          return (
-            <div
-              className={`notice-toast ${isWarning ? 'warning' : isSuccess ? 'success' : 'info'}`}
-              onClick={() => setNotice(null)}
-              title="Click to dismiss"
-            >
-              {isWarning ? (
-                <AlertCircleIcon size={15} className="notice-toast-icon warning" />
-              ) : isSuccess ? (
-                <CheckCircleIcon size={15} className="notice-toast-icon success" />
-              ) : (
-                <InfoIcon size={15} className="notice-toast-icon info" />
-              )}
-              <span>{notice}</span>
-            </div>
-          )
-        })()}
-
-        {!cwd ? (
-          <div className="welcome">
-            <div className="welcome-logo">
-              <AppIcon size={72} />
-            </div>
-            <h1>OpenBuff Desktop</h1>
-            <p className="welcome-sub">Local-first AI coding assistant</p>
-            <button className="btn primary big" onClick={() => void selectFolder()}>
-              <FolderIcon size={16} /> Select a Project Folder
-            </button>
-            <p className="hint">BYOK mode: use your own API key. Code stays local, never uploaded to any server.</p>
-            {!hasProvider && (
-              <button className="link-btn" onClick={() => setShowSettings(true)}>
-                No provider configured? Open Settings →
-              </button>
-            )}
-          </div>
+        {showSettings ? (
+          <SettingsModal
+            onClose={handleCloseSettings}
+            onCreateAgent={openAgentWizard}
+            onSaved={onSettingsSaved}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            colorTheme={colorTheme}
+            onSelectColorTheme={setColorTheme}
+          />
         ) : (
           <>
-            <div className="chat-scroll" ref={chatScrollRef}>
-              {!hasProvider && (
-                <div className="provider-warn">
-                  <span>No provider configured. Please set up your API key and model in Settings.</span>
-                  <button className="btn" onClick={() => setShowSettings(true)}>Open Settings</button>
+            <Sidebar
+              open={leftOpen}
+              onNewTask={newTask}
+              searchOpen={searchOpen}
+              onToggleSearch={() => setSearchOpen((v) => !v)}
+              searchQuery={searchQuery}
+              onSearchQuery={setSearchQuery}
+              searchResults={searchResults}
+              onSearchJump={onSearchJump}
+              projects={projects}
+              onNewProject={() => void selectFolder()}
+              onOpenProject={(p) => void onOpenProject(p)}
+              onOpenTask={(p, t) => void onOpenTask(p, t)}
+              onRenameTask={onRenameTask}
+              onDeleteTask={onDeleteTask}
+              onRemoveProject={onRemoveProject}
+              onSettings={() => setShowSettings(true)}
+              currentProjectPath={cwd}
+            />
+
+            <main className="main">
+              <header className="topbar">
+                <div className="topbar-left">
+                  <button
+                    className="btn icon-only panel-toggle"
+                    onClick={() => setLeftOpen((v) => !v)}
+                    title={leftOpen ? 'Collapse sidebar' : 'Open sidebar'}
+                  >
+                    <PanelLeftIcon size={15} />
+                  </button>
+                  <div className="project-select" ref={projectMenuRef}>
+                    <button
+                      className={`project-name-btn${canSwitchProject ? '' : ' locked'}`}
+                      onClick={canSwitchProject ? () => setProjectMenuOpen((v) => !v) : undefined}
+                      title={canSwitchProject ? 'Choose project' : 'Project is locked while a conversation is active'}
+                    >
+                      {projectName ? <FolderIcon size={13} /> : <AppIcon size={14} />}
+                      <span className="project-name">{projectName || 'OpenBuff Desktop'}</span>
+                      {canSwitchProject && <ChevronDownIcon size={12} />}
+                    </button>
+                    {projectMenuOpen && canSwitchProject && (
+                      <div className="project-menu">
+                        {projects.length === 0 && <div className="mention-empty">No projects yet</div>}
+                        {projects.slice(0, 15).map((p) => (
+                          <button
+                            key={p.path}
+                            className={`project-menu-item${p.path === cwd ? ' current' : ''}`}
+                            onClick={() => {
+                              setProjectMenuOpen(false)
+                              if (p.path !== cwd) void onOpenProject(p.path)
+                            }}
+                            title={p.path}
+                          >
+                            {p.path === cwd ? <FolderOpenIcon size={13} /> : <FolderIcon size={13} />}
+                            <span className="pm-name">{p.name}</span>
+                          </button>
+                        ))}
+                        {projects.length > 0 && <div className="project-menu-sep" />}
+                        <button
+                          className="project-menu-item add"
+                          onClick={() => {
+                            setProjectMenuOpen(false)
+                            void selectFolder()
+                          }}
+                        >
+                          <FolderPlusIcon size={13} />
+                          <span className="pm-name">Add Project…</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {branch && <span className="branch-badge">⎇ {branch}</span>}
+                  {running && (
+                    <span className="running-badge">
+                      <span className="spinner-ring" /> {currentStage ?? 'Working'}
+                    </span>
+                  )}
                 </div>
-              )}
+                <div className="topbar-right">
+                  {!cwd && (
+                    <button className="btn primary" onClick={() => void selectFolder()}>
+                      <FolderIcon size={14} /> Select Folder
+                    </button>
+                  )}
+                  {!hasProvider && (
+                    <button className="btn warn" onClick={() => setShowSettings(true)}>
+                      Set API Key
+                    </button>
+                  )}
+                  <button
+                    className="btn icon-only panel-toggle"
+                    onClick={() => setRightOpen((v) => !v)}
+                    title={rightOpen ? 'Collapse panel' : 'Open panel'}
+                  >
+                    <PanelRightIcon size={15} />
+                  </button>
+                </div>
+              </header>
 
-              {chatItems.length === 0 && historyTask && (
-                <div className="panel-empty history-empty">This conversation has no saved messages yet.</div>
-              )}
+              {notice && (() => {
+                const lower = notice.toLowerCase()
+                const isWarning = lower.includes('stop') || lower.includes('failed') || lower.includes('error') || lower.includes('select a project')
+                const isSuccess = lower.includes('saved') || lower.includes('created') || lower.includes('accepted') || lower.includes('reverted')
+                return (
+                  <div
+                    className={`notice-toast ${isWarning ? 'warning' : isSuccess ? 'success' : 'info'}`}
+                    onClick={() => setNotice(null)}
+                    title="Click to dismiss"
+                  >
+                    {isWarning ? (
+                      <AlertCircleIcon size={15} className="notice-toast-icon warning" />
+                    ) : isSuccess ? (
+                      <CheckCircleIcon size={15} className="notice-toast-icon success" />
+                    ) : (
+                      <InfoIcon size={15} className="notice-toast-icon info" />
+                    )}
+                    <span>{notice}</span>
+                  </div>
+                )
+              })()}
 
-              {chatItems.length === 0 && !historyTask && (
-                <div className="welcome chat-welcome">
+              {!cwd ? (
+                <div className="welcome">
                   <div className="welcome-logo">
                     <AppIcon size={72} />
                   </div>
-                  <h1>What are we building today?</h1>
-                </div>
-              )}
-
-              {chatItems.map((item, i) => {
-                if (item.kind === 'user') {
-                  const isLastUser = chatItems.slice(i + 1).every((it) => it.kind !== 'user')
-                  return (
-                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
-                      <UserBubble
-                        text={item.text}
-                        onCopy={() => void navigator.clipboard?.writeText(item.text)}
-                        onRevert={isLastUser && !running && !historyTask ? () => void requestRevert() : undefined}
-                      />
-                    </div>
-                  )
-                }
-                if (item.kind === 'assistant') {
-                  const isStreaming = streaming && i === chatItems.length - 1
-                  return (
-                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
-                      <AssistantBubble
-                        text={item.text}
-                        reasoning={item.reasoning}
-                        streaming={isStreaming}
-                        onCopy={() => void navigator.clipboard?.writeText(item.text)}
-                      />
-                    </div>
-                  )
-                }
-                if (item.kind === 'tool') {
-                  const isLastTool = i === chatItems.length - 1
-                  return (
-                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
-                      <ToolCard tool={item.tool} isLast={isLastTool && running} />
-                    </div>
-                  )
-                }
-                if (item.kind === 'file-changes') {
-                  return (
-                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
-                      <FileChangesSummary files={item.files} />
-                    </div>
-                  )
-                }
-                if (
-                  item.text.includes('suggest_followups already ended') ||
-                  item.text.includes('No more non-terminal tools are available after followups') ||
-                  item.text.includes('Invalid parameters for') ||
-                  item.text.includes('Raw validation issues:') ||
-                  item.text.includes('Stop requested. Waiting for agent to safely halt')
-                ) {
-                  return null
-                }
-                return (
-                  <div key={i} className="msg-row system" ref={(el) => { msgRefs.current[i] = el }}>
-                    <span className="system-bubble">⚠ {item.text}</span>
-                  </div>
-                )
-              })}
-
-              {followups.length > 0 && (
-                <div className="followups">
-                  <span className="followups-label">Suggested next steps</span>
-                  {followups.map((f, i) => (
-                    <button
-                      key={i}
-                      className="followup-card"
-                      disabled={running}
-                      onClick={() => setPrompt(f.prompt)}
-                      title={f.label && f.label !== f.prompt ? f.prompt : undefined}
-                    >
-                      {f.label || f.prompt}
+                  <h1>OpenBuff Desktop</h1>
+                  <p className="welcome-sub">Local-first AI coding assistant</p>
+                  <button className="btn primary big" onClick={() => void selectFolder()}>
+                    <FolderIcon size={16} /> Select a Project Folder
+                  </button>
+                  <p className="hint">BYOK mode: use your own API key. Code stays local, never uploaded to any server.</p>
+                  {!hasProvider && (
+                    <button className="link-btn" onClick={() => setShowSettings(true)}>
+                      No provider configured? Open Settings →
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {resumeInfo && !running && (
-              <div className={`resume-banner reason-${resumeInfo.reason ?? 'error'}`}>
-                <span className="resume-icon">{resumeInfo.reason === 'rate-limit' ? '⚠' : '↻'}</span>
-                <span className="resume-text">
-                  <span className="resume-text-main">{resumeBannerText(resumeInfo.reason)}</span>
-                  {resumeInfo.errorMessage && (
-                    <span className="resume-text-detail" title={resumeInfo.errorMessage}>
-                      {resumeInfo.errorMessage.length > 220 ? `${resumeInfo.errorMessage.slice(0, 220)}…` : resumeInfo.errorMessage}
-                    </span>
                   )}
-                </span>
-                <button className="btn primary small" onClick={() => void resumeRun()}>
-                  Resume
-                </button>
-                <button className="btn ghost small" onClick={discardResume} title="Discard the preserved state and start fresh">
-                  Discard
-                </button>
-              </div>
-            )}
+                </div>
+              ) : (
+                <>
+                  <div className="chat-scroll" ref={chatScrollRef}>
+                    {!hasProvider && (
+                      <div className="provider-warn">
+                        <span>No provider configured. Please set up your API key and model in Settings.</span>
+                        <button className="btn" onClick={() => setShowSettings(true)}>Open Settings</button>
+                      </div>
+                    )}
 
-            {approvalRequest && (
-              <div className="resume-banner" style={{ border: '1px solid var(--border-warn, #f59e0b)' }}>
-                <span className="resume-icon" style={{ color: '#f59e0b' }}>🛡</span>
-                <span className="resume-text">
-                  <strong>Action requires approval:</strong> {approvalRequest.message}
-                </span>
-                <button
-                  className="btn primary small"
-                  onClick={() => {
-                    setApprovalRequest(null)
-                    void window.openbuff.respondApproval(true)
-                  }}
-                >
-                  Allow
-                </button>
-                <button
-                  className="btn ghost small"
-                  onClick={() => {
-                    setApprovalRequest(null)
-                    void window.openbuff.respondApproval(false)
-                  }}
-                >
-                  Deny
-                </button>
-              </div>
-            )}
+                    {chatItems.length === 0 && historyTask && (
+                      <div className="panel-empty history-empty">This conversation has no saved messages yet.</div>
+                    )}
 
-            {activeTodos.length > 0 && running && (
-              <div className="todo-panel-dock">
-                <TodoCard todos={activeTodos} collapsed={todoPanelCollapsed} onToggleCollapse={() => setTodoPanelCollapsed((c) => !c)} />
-              </div>
-            )}
+                    {chatItems.length === 0 && !historyTask && (
+                      <div className="welcome chat-welcome">
+                        <div className="welcome-logo">
+                          <AppIcon size={72} />
+                        </div>
+                        <h1>What are we building today?</h1>
+                      </div>
+                    )}
 
-            <Composer
-              prompt={prompt}
-              onChange={setPrompt}
-              onSend={() => void send()}
-              onStop={stop}
-              onNewTask={newTask}
-              onInitRequest={openAgentWizard}
-              onSearchRequest={() => setSearchOpen(true)}
+                    {chatItems.map((item, i) => {
+                      if (item.kind === 'user') {
+                        const isLastUser = chatItems.slice(i + 1).every((it) => it.kind !== 'user')
+                        return (
+                          <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                            <UserBubble
+                              text={item.text}
+                              onCopy={() => void navigator.clipboard?.writeText(item.text)}
+                              onRevert={isLastUser && !running && !historyTask ? () => void requestRevert() : undefined}
+                            />
+                          </div>
+                        )
+                      }
+                      if (item.kind === 'assistant') {
+                        const isStreaming = streaming && i === chatItems.length - 1
+                        return (
+                          <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                            <AssistantBubble
+                              text={item.text}
+                              reasoning={item.reasoning}
+                              streaming={isStreaming}
+                              onCopy={() => void navigator.clipboard?.writeText(item.text)}
+                            />
+                          </div>
+                        )
+                      }
+                      if (item.kind === 'tool') {
+                        const isLastTool = i === chatItems.length - 1
+                        return (
+                          <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                            <ToolCard tool={item.tool} isLast={isLastTool && running} />
+                          </div>
+                        )
+                      }
+                      if (item.kind === 'file-changes') {
+                        return (
+                          <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                            <FileChangesSummary files={item.files} />
+                          </div>
+                        )
+                      }
+                      if (
+                        item.text.includes('suggest_followups already ended') ||
+                        item.text.includes('No more non-terminal tools are available after followups') ||
+                        item.text.includes('Invalid parameters for') ||
+                        item.text.includes('Raw validation issues:') ||
+                        item.text.includes('Stop requested. Waiting for agent to safely halt')
+                      ) {
+                        return null
+                      }
+                      return (
+                        <div key={i} className="msg-row system" ref={(el) => { msgRefs.current[i] = el }}>
+                          <span className="system-bubble">⚠ {item.text}</span>
+                        </div>
+                      )
+                    })}
+
+                    {followups.length > 0 && (
+                      <div className="followups">
+                        <span className="followups-label">Suggested next steps</span>
+                        {followups.map((f, i) => (
+                          <button
+                            key={i}
+                            className="followup-card"
+                            disabled={running}
+                            onClick={() => setPrompt(f.prompt)}
+                            title={f.label && f.label !== f.prompt ? f.prompt : undefined}
+                          >
+                            {f.label || f.prompt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {resumeInfo && !running && (
+                    <div className={`resume-banner reason-${resumeInfo.reason ?? 'error'}`}>
+                      <span className="resume-icon">{resumeInfo.reason === 'rate-limit' ? '⚠' : '↻'}</span>
+                      <span className="resume-text">
+                        <span className="resume-text-main">{resumeBannerText(resumeInfo.reason)}</span>
+                        {resumeInfo.errorMessage && (
+                          <span className="resume-text-detail" title={resumeInfo.errorMessage}>
+                            {resumeInfo.errorMessage.length > 220 ? `${resumeInfo.errorMessage.slice(0, 220)}…` : resumeInfo.errorMessage}
+                          </span>
+                        )}
+                      </span>
+                      <button className="btn primary small" onClick={() => void resumeRun()}>
+                        Resume
+                      </button>
+                      <button className="btn ghost small" onClick={discardResume} title="Discard the preserved state and start fresh">
+                        Discard
+                      </button>
+                    </div>
+                  )}
+
+                  {approvalRequest && (
+                    <div className="resume-banner" style={{ border: '1px solid var(--border-warn, #f59e0b)' }}>
+                      <span className="resume-icon" style={{ color: '#f59e0b' }}>🛡</span>
+                      <span className="resume-text">
+                        <strong>Action requires approval:</strong> {approvalRequest.message}
+                      </span>
+                      <button
+                        className="btn primary small"
+                        onClick={() => {
+                          setApprovalRequest(null)
+                          void window.openbuff.respondApproval(true)
+                        }}
+                      >
+                        Allow
+                      </button>
+                      <button
+                        className="btn ghost small"
+                        onClick={() => {
+                          setApprovalRequest(null)
+                          void window.openbuff.respondApproval(false)
+                        }}
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  )}
+
+                  {activeTodos.length > 0 && running && (
+                    <div className="todo-panel-dock">
+                      <TodoCard todos={activeTodos} collapsed={todoPanelCollapsed} onToggleCollapse={() => setTodoPanelCollapsed((c) => !c)} />
+                    </div>
+                  )}
+
+                  <Composer
+                    prompt={prompt}
+                    onChange={setPrompt}
+                    onSend={() => void send()}
+                    onStop={stop}
+                    onNewTask={newTask}
+                    onInitRequest={openAgentWizard}
+                    onSearchRequest={() => setSearchOpen(true)}
+                    running={running}
+                    stopping={stopping}
+                    disabled={!hasProvider}
+                    attachments={attachments}
+                    onAttachFiles={() => void onAttachFiles()}
+                    onAttachFilesPath={onAttachFilesPath}
+                    onRemoveAttachment={onRemoveAttachment}
+                    providers={models}
+                    activeModel={settings.activeModel}
+                    onModelChange={onModelChange}
+                    reasoningEffort={settings.reasoningEffort}
+                    onReasoningChange={onReasoningChange}
+                    tokenUsage={tokenUsage}
+                    totalCost={totalCost}
+                    fileCandidates={fileCandidates}
+                    skills={skills}
+                    focusSignal={focusSignal}
+                  />
+                </>
+              )}
+            </main>
+
+            <RightPanel
+              open={rightOpen}
+              tab={rightTab}
+              onTab={onRightTab}
+              cwd={cwd}
+              selectedFile={selectedFile}
+              onSelectFile={onSelectFile}
+              onOpenFile={(path) => void openFileByPath(path, basenameOf(path))}
+              events={events}
+              onCloseFile={() => setSelectedFile(null)}
               running={running}
-              stopping={stopping}
-              disabled={!hasProvider}
-              attachments={attachments}
-              onAttachFiles={() => void onAttachFiles()}
-              onAttachFilesPath={onAttachFilesPath}
-              onRemoveAttachment={onRemoveAttachment}
-              providers={models}
-              activeModel={settings.activeModel}
-              onModelChange={onModelChange}
-              reasoningEffort={settings.reasoningEffort}
-              onReasoningChange={onReasoningChange}
-              tokenUsage={tokenUsage}
-              totalCost={totalCost}
-              fileCandidates={fileCandidates}
-              skills={skills}
-              focusSignal={focusSignal}
             />
           </>
         )}
-      </main>
-
-      <RightPanel
-          open={rightOpen}
-          tab={rightTab}
-          onTab={onRightTab}
-          cwd={cwd}
-          selectedFile={selectedFile}
-          onSelectFile={onSelectFile}
-          onOpenFile={(path) => void openFileByPath(path, basenameOf(path))}
-          events={events}
-          onCloseFile={() => setSelectedFile(null)}
-          running={running}
-        />
       </div>
-
-      {showSettings && (
-        <SettingsModal
-          onClose={() => setShowSettings(false)}
-          onCreateAgent={openAgentWizard}
-          onSaved={onSettingsSaved}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-          colorTheme={colorTheme}
-          onSelectColorTheme={setColorTheme}
-        />
-      )}
 
       {showAgentWizard && cwd && (
         <AgentWizardModal
