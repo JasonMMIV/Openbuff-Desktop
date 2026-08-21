@@ -1038,50 +1038,52 @@ export default function SettingsModal({
           {/* 2. General Tab */}
           {activeTab === 'general' && (
             <div className="settings-tab-content">
-              <div className="settings-field-group">
-                <label className="settings-field-label">Default Model</label>
-                <CustomSelect
-                  value={activeModel}
-                  onChange={setActiveModel}
-                  fullWidth
-                  placeholder={providers.every((p) => p.models.length === 0) ? 'Add models to a provider first' : 'Select default model'}
-                  options={providers.flatMap((p) =>
-                    p.models.map((m) => ({
-                      value: `${p.id}/${m}`,
-                      label: `${p.label} / ${m}`
-                    }))
-                  )}
-                />
-                <p className="hint">Used for primary reasoning and all agents without custom routing rules.</p>
-              </div>
+              <div className="settings-section-card">
+                <div className="settings-field-group">
+                  <label className="settings-field-label">Default Model</label>
+                  <CustomSelect
+                    value={activeModel}
+                    onChange={setActiveModel}
+                    fullWidth
+                    placeholder={providers.every((p) => p.models.length === 0) ? 'Add models to a provider first' : 'Select default model'}
+                    options={providers.flatMap((p) =>
+                      p.models.map((m) => ({
+                        value: `${p.id}/${m}`,
+                        label: `${p.label} / ${m}`
+                      }))
+                    )}
+                  />
+                  <p className="hint">Used for primary reasoning and all agents without custom routing rules.</p>
+                </div>
 
-              <div className="settings-field-group">
-                <label className="settings-field-label">Reasoning Level</label>
-                <CustomSelect
-                  value={reasoningEffort}
-                  onChange={setReasoningEffort}
-                  fullWidth
-                  options={getReasoningOptionsForModel(activeModel).map((r) => ({
-                    value: r,
-                    label: r === 'default' ? 'Default' : r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
-                  }))}
-                />
-                <p className="hint">Controls extended thinking effort for models supporting reasoning tokens.</p>
-              </div>
+                <div className="settings-field-group">
+                  <label className="settings-field-label">Reasoning Level</label>
+                  <CustomSelect
+                    value={reasoningEffort}
+                    onChange={setReasoningEffort}
+                    fullWidth
+                    options={getReasoningOptionsForModel(activeModel).map((r) => ({
+                      value: r,
+                      label: r === 'default' ? 'Default' : r.charAt(0).toUpperCase() + r.slice(1).replace('-', ' ')
+                    }))}
+                  />
+                  <p className="hint">Controls extended thinking effort for models supporting reasoning tokens.</p>
+                </div>
 
-              <div className="settings-field-group">
-                <label className="settings-field-label">Approval Mode</label>
-                <CustomSelect
-                  value={approvalMode}
-                  onChange={(val) => setApprovalMode(val as typeof approvalMode)}
-                  fullWidth
-                  options={[
-                    { value: 'balanced', label: 'Balanced — high-impact actions require approval' },
-                    { value: 'strict', label: 'Strict — approve all changes' },
-                    { value: 'allow-all', label: 'Allow all — auto-approve everything' }
-                  ]}
-                />
-                <p className="hint">Determines when OpenBuff requires confirmation before modifying files or running commands.</p>
+                <div className="settings-field-group">
+                  <label className="settings-field-label">Approval Mode</label>
+                  <CustomSelect
+                    value={approvalMode}
+                    onChange={(val) => setApprovalMode(val as typeof approvalMode)}
+                    fullWidth
+                    options={[
+                      { value: 'balanced', label: 'Balanced — high-impact actions require approval' },
+                      { value: 'strict', label: 'Strict — approve all changes' },
+                      { value: 'allow-all', label: 'Allow all — auto-approve everything' }
+                    ]}
+                  />
+                  <p className="hint">Determines when OpenBuff requires confirmation before modifying files or running commands.</p>
+                </div>
               </div>
             </div>
           )}

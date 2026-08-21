@@ -120,12 +120,16 @@ export default function Sidebar(props: SidebarProps) {
   return (
     <aside className={`sidebar ${props.open ? 'open' : 'closed'}`}>
       <div className="sidebar-top">
-        <button className="nav-item" onClick={props.onNewTask} title="New task">
-          <NotePenIcon size={15} />
+        <button className="nav-item new-task-btn" onClick={props.onNewTask} title="New task">
+          <NotePenIcon size={16} />
           <span>New Task</span>
         </button>
 
-        <button className={`nav-item ${props.searchOpen ? 'active' : ''}`} onClick={props.onToggleSearch} title="Search messages & files">
+        <button
+          className={`nav-item search-trigger-btn ${props.searchOpen ? 'active' : ''}`}
+          onClick={props.onToggleSearch}
+          title="Search messages & files"
+        >
           <SearchIcon size={15} />
           <span>Search</span>
         </button>

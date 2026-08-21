@@ -399,7 +399,7 @@ textarea {
 .sidebar {
   width: 258px;
   flex-shrink: 0;
-  background: var(--bg-1);
+  background: var(--bg-0);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -430,10 +430,10 @@ textarea {
 }
 
 .sidebar-top {
-  padding: var(--space-3) var(--space-2) 0;
+  padding: 12px 10px 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 5px;
   flex-shrink: 0;
 }
 
@@ -442,11 +442,12 @@ textarea {
   align-items: center;
   gap: 9px;
   width: 100%;
-  background: none;
-  border: none;
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-1);
-  font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-3);
+  font-size: 13.5px;
+  font-weight: 500;
+  padding: 7px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
@@ -462,9 +463,64 @@ textarea {
   transform: translateY(1px);
 }
 
-.nav-item.active {
-  background: none;
+/* ─── Primary CTA: New Task Button ───────────────────── */
+.nav-item.new-task-btn {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  color: var(--text-0);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 3px var(--shadow-sm);
+  justify-content: flex-start;
+  margin-bottom: 2px;
+}
+
+.nav-item.new-task-btn svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.nav-item.new-task-btn:hover {
+  background: var(--bg-1);
+  border-color: var(--border-strong);
+  color: var(--text-0);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px var(--shadow-sm);
+}
+
+.nav-item.new-task-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px var(--shadow-sm);
+}
+
+/* ─── Search Trigger Button ──────────────────────────── */
+.nav-item.search-trigger-btn {
+  background: transparent;
+  border: 1px solid transparent;
   color: var(--text-1);
+  font-size: 13.5px;
+  font-weight: 550;
+  padding: 7px 10px;
+}
+
+.nav-item.search-trigger-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-0);
+  border-color: transparent;
+}
+
+.nav-item.search-trigger-btn.active {
+  background: var(--bg-1);
+  border-color: var(--border);
+  color: var(--text-0);
+  font-weight: 600;
+  box-shadow: 0 1px 3px var(--shadow-sm);
+}
+
+.nav-item.search-trigger-btn.active svg {
+  color: var(--accent);
 }
 
 .nav-section-head {
@@ -582,19 +638,29 @@ textarea {
   align-items: center;
   gap: 6px;
   background: none;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-1);
-  font-size: 14px;
-  padding: 4px 8px;
-  border-radius: 5px;
+  font-size: 13.5px;
+  padding: 5px 8px;
+  border-radius: 6px;
   cursor: pointer;
   text-align: left;
   width: 100%;
+  transition: all 0.12s ease;
 }
 
 .task-row:hover {
   background: var(--bg-hover);
   color: var(--text-0);
+}
+
+.task-row.active,
+.task-row.selected {
+  background: var(--bg-1);
+  color: var(--text-0);
+  font-weight: 600;
+  border-color: var(--border);
+  box-shadow: 0 1px 3px var(--shadow-sm);
 }
 
 .task-row.editing {
@@ -603,11 +669,11 @@ textarea {
 
 .task-rename-input {
   width: 100%;
-  background: var(--bg-2);
+  background: var(--bg-1);
   color: var(--text-0);
   border: 1px solid var(--accent);
   border-radius: 4px;
-  padding: 2px 6px;
+  padding: 3px 6px;
   font-size: 13px;
   font-family: inherit;
   outline: none;
@@ -622,7 +688,7 @@ textarea {
 }
 
 .task-time {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
   flex-shrink: 0;
 }
@@ -699,13 +765,14 @@ textarea {
 }
 
 .search-box input {
-  background: var(--bg-2);
+  background: var(--bg-1);
   color: var(--text-0);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   font-family: inherit;
+  box-shadow: 0 1px 2px var(--shadow-sm);
   transition: border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
@@ -795,7 +862,7 @@ textarea {
 .activity-panel.right-content-panel {
   width: 306px;
   flex: 0 0 auto;
-  background: var(--bg-1);
+  background: var(--bg-0);
   border-left: 1px solid var(--border);
   overflow: hidden;
   transition: width 0.22s ease, border-color 0.22s ease;
@@ -2265,16 +2332,17 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   padding: 8px 12px;
+  box-shadow: 0 4px 20px var(--shadow-md), 0 1px 3px var(--shadow-sm);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .composer:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 3px var(--accent-soft), 0 8px 24px var(--shadow-md);
 }
 
 .composer textarea {
@@ -2829,6 +2897,7 @@ select option {
 
 .tabs {
   display: flex;
+  background: var(--bg-0);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -2840,7 +2909,7 @@ select option {
   color: var(--text-2);
   font-size: 13px;
   font-weight: 500;
-  padding: 10px 0;
+  padding: 9px 0;
   cursor: pointer;
   border-bottom: 2px solid transparent;
   transition: all 0.12s;
@@ -2848,10 +2917,13 @@ select option {
 
 .tab:hover {
   color: var(--text-0);
+  background: var(--bg-hover);
 }
 
 .tab.active {
   color: var(--text-0);
+  background: var(--bg-1);
+  font-weight: 600;
   border-bottom-color: var(--accent);
 }
 
@@ -2870,6 +2942,7 @@ select option {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--bg-1);
 }
 
 .files-tab .file-tree {
@@ -2882,6 +2955,7 @@ select option {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--bg-1);
 }
 
 .file-preview-head {
@@ -2895,8 +2969,10 @@ select option {
 
 .file-preview-name {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 12.5px;
+  font-weight: 650;
   color: var(--accent);
+  letter-spacing: -0.01em;
 }
 
 .mini-btn {
@@ -2917,12 +2993,15 @@ select option {
 
 .file-preview-content {
   font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12.5px;
+  line-height: 1.6;
   padding: 12px 14px;
-  overflow: auto;
-  color: var(--text-1);
-  white-space: pre;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-1);
+  color: var(--text-0);
+  white-space: pre-wrap;
+  word-break: break-word;
   flex: 1;
   min-height: 0;
 }
@@ -3077,9 +3156,10 @@ select option {
 .index-summary-card {
   min-width: 0;
   padding: 8px 7px;
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
+  box-shadow: 0 1px 2px var(--shadow-sm);
 }
 
 .index-summary-card strong,
@@ -3358,13 +3438,13 @@ select option {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: var(--bg-0);
+  background: var(--bg-1);
 }
 
 .settings-page-sidebar {
   width: 220px;
   flex-shrink: 0;
-  background: var(--bg-1);
+  background: var(--bg-0);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -3387,7 +3467,7 @@ select option {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg-2);
+  background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-0);
@@ -3397,6 +3477,7 @@ select option {
   padding: 5px 10px;
   cursor: pointer;
   width: fit-content;
+  box-shadow: 0 1px 2px var(--shadow-sm);
   transition: all var(--transition-base);
 }
 
@@ -3431,7 +3512,7 @@ select option {
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -3450,10 +3531,11 @@ select option {
 }
 
 .settings-modal-nav-item.active {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
+  background: var(--bg-1);
+  border-color: var(--border);
   color: var(--text-0);
   font-weight: 600;
+  box-shadow: 0 1px 3px var(--shadow-sm);
 }
 
 .settings-modal-nav-item.active .settings-modal-nav-icon {
@@ -3501,7 +3583,7 @@ select option {
   min-width: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg-0);
+  background: var(--bg-1);
 }
 
 .settings-page-header {
@@ -3509,7 +3591,7 @@ select option {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 32px 14px;
+  padding: 20px 32px 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--bg-1);
@@ -3532,9 +3614,10 @@ select option {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: 24px 32px 40px;
   display: flex;
   flex-direction: column;
+  background: var(--bg-1);
 }
 
 .settings-page-body .settings-tab-content {
@@ -3553,6 +3636,17 @@ select option {
   flex-direction: column;
   gap: 16px;
   width: 100%;
+}
+
+.settings-section-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px var(--shadow-sm);
 }
 
 .settings-page input,
@@ -3640,10 +3734,11 @@ select option {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
+  padding: 14px 18px;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: 0 1px 3px var(--shadow-sm);
   margin-top: 4px;
 }
 
@@ -3675,17 +3770,20 @@ select option {
   transition: all 0.15s ease;
   color: var(--text-0);
   font-family: inherit;
+  box-shadow: 0 1px 2px var(--shadow-sm);
 }
 
 .color-theme-card:hover {
   background: var(--bg-2);
   border-color: var(--border-strong);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px var(--shadow-sm);
 }
 
 .color-theme-card.active {
   border-color: var(--accent);
-  background: var(--bg-2);
-  box-shadow: 0 0 0 2px var(--accent-soft);
+  background: var(--bg-1);
+  box-shadow: 0 0 0 2px var(--accent-soft), 0 2px 6px var(--shadow-sm);
 }
 
 .color-theme-header {
@@ -3731,6 +3829,7 @@ select option {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: 0 1px 2px var(--shadow-sm);
 }
 
 .route-agent {
@@ -3761,6 +3860,7 @@ select option {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: 0 1px 2px var(--shadow-sm);
 }
 
 .local-agent-name {
@@ -3819,6 +3919,7 @@ select option {
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  box-shadow: 0 1px 3px var(--shadow-sm);
   cursor: pointer;
   transition: all var(--transition-base);
 }
@@ -3957,6 +4058,7 @@ select option {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
+  box-shadow: 0 1px 3px var(--shadow-sm);
 }
 
 .provider-detail-section-head {
@@ -4421,8 +4523,8 @@ select option {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   overflow: hidden;
-  background: var(--bg-2);
-  border: 1px solid var(--border-strong);
+  background: var(--bg-1);
+  border: 1px solid var(--border);
   border-radius: 16px;
   box-shadow: 0 26px 80px var(--shadow);
   animation: wizard-panel-in 0.22s cubic-bezier(.2,.8,.2,1);
@@ -4436,7 +4538,7 @@ select option {
   flex-direction: column;
   gap: 34px;
   padding: 24px 18px 18px;
-  background: linear-gradient(155deg, var(--bg-3), var(--bg-1));
+  background: var(--bg-0);
   border-right: 1px solid var(--border);
 }
 
@@ -4488,19 +4590,20 @@ select option {
   align-items: flex-start;
   gap: 10px;
   width: 100%;
-  padding: 9px 8px;
+  padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--text-1);
   font-family: inherit;
   text-align: left;
+  transition: all 0.12s ease;
 }
 
 .agent-wizard-step:disabled { opacity: 1; cursor: default; }
 .agent-wizard-step:not(:disabled) { cursor: pointer; }
-.agent-wizard-step:not(:disabled):hover { background: var(--bg-hover); }
-.agent-wizard-step.active { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text-0); }
+.agent-wizard-step:not(:disabled):hover { background: var(--bg-hover); color: var(--text-0); }
+.agent-wizard-step.active { background: var(--bg-1); border-color: var(--border); color: var(--text-0); font-weight: 600; box-shadow: 0 1px 3px var(--shadow-sm); }
 .agent-wizard-step.complete { color: var(--green); }
 
 .agent-wizard-step-number {
@@ -4549,7 +4652,7 @@ select option {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-2);
+  background: var(--bg-1);
 }
 
 .agent-wizard-header {
@@ -4608,18 +4711,19 @@ select option {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--bg-1);
+  box-shadow: 0 1px 2px var(--shadow-sm);
   color: var(--text-1);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: border-color .12s, background .12s, transform .12s;
+  transition: border-color .12s, background .12s, transform .12s, box-shadow .12s;
 }
 
 .agent-template { min-height: 68px; padding: 10px; }
 .agent-template:hover,
-.agent-capability:hover { border-color: var(--border-strong); background: var(--bg-hover); transform: translateY(-1px); }
+.agent-capability:hover { border-color: var(--border-strong); background: var(--bg-2); transform: translateY(-1px); box-shadow: 0 3px 8px var(--shadow-sm); }
 .agent-template.selected,
-.agent-capability.selected { background: var(--bg-hover); border-color: var(--border-strong); }
+.agent-capability.selected { background: var(--bg-1); border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), 0 2px 6px var(--shadow-sm); }
 .agent-template-dot { display: inline-flex; align-items: center; justify-content: center; width: 23px; height: 23px; flex-shrink: 0; border-radius: 7px; background: var(--bg-3); color: var(--accent); font-size: 11px; font-weight: 700; }
 .agent-template.selected .agent-template-dot { background: var(--accent-strong); color: #fff; }
 .agent-template strong,
