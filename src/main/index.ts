@@ -160,6 +160,7 @@ function createWindow(): void {
     height: saved.height,
     minWidth: 960,
     minHeight: 640,
+    frame: false,
     title: 'OpenBuff Desktop',
     icon: iconPath,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d12' : '#f6f7f9',
@@ -174,6 +175,14 @@ function createWindow(): void {
   if (saved.maximized) win.maximize()
   win.on('resize', () => saveWindowState(win))
   win.on('move', () => saveWindowState(win))
+  win.on('maximize', () => {
+    saveWindowState(win)
+    win.webContents.send('openbuff:windowMaximizeChange', true)
+  })
+  win.on('unmaximize', () => {
+    saveWindowState(win)
+    win.webContents.send('openbuff:windowMaximizeChange', false)
+  })
   win.on('close', () => {
     if (isRunning()) {
       abortRun()
@@ -249,6 +258,31 @@ function listSkills(cwd: string): SkillInfo[] {
 }
 
 function registerIpc(): void {
+  /* ─── Window Controls (frameless title bar) ─────── */
+  ipcMain.on('openbuff:windowMinimize', () => {
+    BrowserWindow.getFocusedWindow()?.minimize()
+  })
+  ipcMain.on('openbuff:windowMaximize', () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win) win.isMaximized() ? win.unmaximize() : win.maximize()
+  })
+  ipcMain.on('openbuff:windowClose', () => {
+    BrowserWindow.getFocusedWindow()?.close()
+  })
+  ipcMain.handle('openbuff:windowIsMaximized', () => {
+    return BrowserWindow.getFocusedWindow()?.isMaximized() ?? false
+  })
+  ipcMain.on('openbuff:windowReload', () => {
+    BrowserWindow.getFocusedWindow()?.webContents.reload()
+  })
+  ipcMain.on('openbuff:windowForceReload', () => {
+    BrowserWindow.getFocusedWindow()?.webContents.reloadIgnoringCache()
+  })
+  ipcMain.on('openbuff:windowToggleFullScreen', () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win) win.setFullScreen(!win.isFullScreen())
+  })
+
   ipcMain.handle('openbuff:getState', () => {
     const settings = getAppSettings()
     return {

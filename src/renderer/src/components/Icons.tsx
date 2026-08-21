@@ -466,3 +466,43 @@ export function ListIcon(props: IconProps) {
   )
 }
 
+/* ─── Window Controls ──────────────────────────────── */
+
+export function WindowMinimizeIcon(props: IconProps) {
+  const b = base(props)
+  return (
+    <svg {...b} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+export function WindowMaximizeIcon(props: IconProps) {
+  const b = base(props)
+  return (
+    <svg {...b} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="5" width="14" height="14" rx="1" />
+    </svg>
+  )
+}
+
+export function WindowRestoreIcon(props: IconProps) {
+  const b = base(props)
+  return (
+    <svg {...b} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="7" y="7" width="11" height="11" rx="1" />
+      <path d="M7 16V5h11" />
+    </svg>
+  )
+}
+
+export function WindowCloseIcon(props: IconProps) {
+  const b = base(props)
+  return (
+    <svg {...b} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <line x1="6" y1="6" x2="18" y2="18" />
+      <line x1="18" y1="6" x2="6" y2="18" />
+    </svg>
+  )
+}
+

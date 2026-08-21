@@ -26,6 +26,20 @@ export interface UiEvent {
 }
 
 const api = {
+  /* Window controls (frameless title bar) */
+  windowMinimize: () => ipcRenderer.send('openbuff:windowMinimize'),
+  windowMaximize: () => ipcRenderer.send('openbuff:windowMaximize'),
+  windowClose: () => ipcRenderer.send('openbuff:windowClose'),
+  windowIsMaximized: () => ipcRenderer.invoke('openbuff:windowIsMaximized'),
+  windowReload: () => ipcRenderer.send('openbuff:windowReload'),
+  windowForceReload: () => ipcRenderer.send('openbuff:windowForceReload'),
+  windowToggleFullScreen: () => ipcRenderer.send('openbuff:windowToggleFullScreen'),
+  onWindowMaximizeChange: (callback: (maximized: boolean) => void) => {
+    const listener = (_e: IpcRendererEvent, maximized: boolean) => callback(maximized)
+    ipcRenderer.on('openbuff:windowMaximizeChange', listener)
+    return () => { ipcRenderer.removeListener('openbuff:windowMaximizeChange', listener) }
+  },
+
   getState: () => ipcRenderer.invoke('openbuff:getState'),
   selectFolder: () => ipcRenderer.invoke('openbuff:selectFolder'),
   selectFiles: () => ipcRenderer.invoke('openbuff:selectFiles'),

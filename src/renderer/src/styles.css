@@ -383,8 +383,16 @@ textarea {
 /* ─── App layout ─────────────────────────────────────── */
 .app {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   background: var(--bg-0);
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ─── Left sidebar (nav + content) ───────────────────── */
@@ -397,6 +405,8 @@ textarea {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
   transition: width var(--transition-slow), border-color var(--transition-slow);
 }
 
@@ -406,7 +416,7 @@ textarea {
 }
 
 /* 響應式：小螢幕自動收起側邊欄 */
-@media (max-width: 900px) {
+@media (max-width: 500px) {
   .sidebar {
     position: absolute;
     z-index: 100;
@@ -868,6 +878,11 @@ textarea {
   background: var(--bg-1);
 }
 
+.topbar-left,
+.topbar-right {
+  -webkit-app-region: no-drag;
+}
+
 .topbar-left {
   display: flex;
   align-items: center;
@@ -879,6 +894,150 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* ─── Title bar (frameless window, full-width) ─── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  flex-shrink: 0;
+  background: var(--bg-0);
+  border-bottom: 1px solid var(--border);
+  padding: 0 4px;
+  position: relative;
+  z-index: 50;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  flex-shrink: 0;
+}
+
+.titlebar-menus {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.titlebar-menu {
+  position: relative;
+}
+
+.titlebar-menu-btn {
+  background: none;
+  border: none;
+  color: var(--text-1);
+  font-size: 12.5px;
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.titlebar-menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-0);
+}
+
+.titlebar-menu-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 180px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 4px;
+  z-index: 200;
+}
+
+.titlebar-menu:hover .titlebar-menu-dropdown {
+  display: block;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text-0);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}
+
+.menu-shortcut {
+  margin-left: auto;
+  padding-left: 24px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.menu-item:disabled:hover {
+  background: transparent;
+}
+
+.titlebar-drag-region {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+/* ─── Window control buttons ─── */
+.window-controls {
+  display: flex;
+  align-items: center;
+  margin-left: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.window-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  color: var(--text-1);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.window-control-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-0);
+}
+
+.window-close-btn:hover {
+  background: var(--red);
+  color: #fff;
 }
 
 .topbar .panel-toggle {

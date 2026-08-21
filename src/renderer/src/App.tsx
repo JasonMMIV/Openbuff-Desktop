@@ -15,7 +15,11 @@ import {
   FolderPlusIcon,
   InfoIcon,
   PanelLeftIcon,
-  PanelRightIcon
+  PanelRightIcon,
+  WindowMinimizeIcon,
+  WindowMaximizeIcon,
+  WindowRestoreIcon,
+  WindowCloseIcon
 } from './components/Icons'
 import type { TreeNode } from './components/FileTree'
 import type { UiEvent } from '../../preload'
@@ -300,6 +304,8 @@ export default function App() {
   const [approvalRequest, setApprovalRequest] = useState<{ message: string; raw?: unknown } | null>(null)
   const [activeTodos, setActiveTodos] = useState<TodoTodo[]>([])
   const [todoPanelCollapsed, setTodoPanelCollapsed] = useState(false)
+  const [isMaximized, setIsMaximized] = useState(false)
+  const [zoomLevel, setZoomLevel] = useState(100)
 
   const previousRunRef = useRef<unknown>(null)
   const streamRef = useRef('')
@@ -325,6 +331,55 @@ export default function App() {
     document.documentElement.dataset.colorTheme = colorTheme
     localStorage.setItem('openbuff-color-theme', colorTheme)
   }, [colorTheme])
+
+  // Window maximize state (frameless title bar)
+  useEffect(() => {
+    if (IS_PREVIEW) return
+    void window.openbuff.windowIsMaximized().then(setIsMaximized)
+    const unsub = window.openbuff.onWindowMaximizeChange(setIsMaximized)
+    return unsub
+  }, [])
+
+
+
+  const reloadPage = useCallback(() => {
+    if (IS_PREVIEW) return
+    window.openbuff.windowReload()
+  }, [])
+
+  const forceReloadPage = useCallback(() => {
+    if (IS_PREVIEW) return
+    window.openbuff.windowForceReload()
+  }, [])
+
+  const zoomIn = useCallback(() => {
+    if (IS_PREVIEW) return
+    setZoomLevel((prev) => {
+      const next = Math.min(prev + 10, 300)
+      window.openbuff.setZoomFactor(next / 100)
+      return next
+    })
+  }, [])
+
+  const zoomOut = useCallback(() => {
+    if (IS_PREVIEW) return
+    setZoomLevel((prev) => {
+      const next = Math.max(prev - 10, 30)
+      window.openbuff.setZoomFactor(next / 100)
+      return next
+    })
+  }, [])
+
+  const resetZoom = useCallback(() => {
+    if (IS_PREVIEW) return
+    setZoomLevel(100)
+    window.openbuff.setZoomFactor(1)
+  }, [])
+
+  const toggleFullScreen = useCallback(() => {
+    if (IS_PREVIEW) return
+    window.openbuff.windowToggleFullScreen()
+  }, [])
 
   // Auto-dismiss notice
   useEffect(() => {
@@ -1459,6 +1514,66 @@ export default function App() {
 
   return (
     <div className="app">
+      <header className="titlebar">
+        <div className="titlebar-left">
+          <AppIcon size={16} />
+          <nav className="titlebar-menus">
+            <div className="titlebar-menu">
+              <button className="titlebar-menu-btn">File</button>
+              <div className="titlebar-menu-dropdown">
+                <button className="menu-item" onClick={newTask}>New Task</button>
+                <button className="menu-item" onClick={() => void selectFolder()}>Open Folder…</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={() => setShowSettings(true)}>Settings</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={() => window.openbuff.windowClose()}>Exit</button>
+              </div>
+            </div>
+            <div className="titlebar-menu">
+              <button className="titlebar-menu-btn">Edit</button>
+              <div className="titlebar-menu-dropdown">
+                <button className="menu-item" onClick={() => setSearchOpen(true)}>Find…</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={() => document.execCommand('undo')}>Undo</button>
+                <button className="menu-item" onClick={() => document.execCommand('redo')}>Redo</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={() => document.execCommand('cut')}>Cut</button>
+                <button className="menu-item" onClick={() => document.execCommand('copy')}>Copy</button>
+                <button className="menu-item" onClick={() => void navigator.clipboard?.readText().then((t) => document.execCommand('insertText', false, t)).catch(() => {}) }>Paste</button>
+                <button className="menu-item" onClick={() => document.execCommand('selectAll')}>Select All</button>
+              </div>
+            </div>
+            <div className="titlebar-menu">
+              <button className="titlebar-menu-btn">View</button>
+              <div className="titlebar-menu-dropdown">
+                <button className="menu-item" onClick={reloadPage}>Reload</button>
+                <button className="menu-item" onClick={forceReloadPage}>Force Reload</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={resetZoom}>Actual Size</button>
+                <button className="menu-item" onClick={zoomIn}>Zoom In</button>
+                <button className="menu-item" onClick={zoomOut}>Zoom Out</button>
+                <div className="menu-sep" />
+                <button className="menu-item" onClick={toggleFullScreen}>Toggle Full Screen</button>
+              </div>
+            </div>
+          </nav>
+        </div>
+        <div className="titlebar-drag-region" />
+        {!IS_PREVIEW && (
+          <div className="window-controls">
+            <button className="window-control-btn" onClick={() => window.openbuff.windowMinimize()} title="Minimize">
+              <WindowMinimizeIcon size={12} />
+            </button>
+            <button className="window-control-btn" onClick={() => window.openbuff.windowMaximize()} title={isMaximized ? 'Restore' : 'Maximize'}>
+              {isMaximized ? <WindowRestoreIcon size={12} /> : <WindowMaximizeIcon size={12} />}
+            </button>
+            <button className="window-control-btn window-close-btn" onClick={() => window.openbuff.windowClose()} title="Close">
+              <WindowCloseIcon size={12} />
+            </button>
+          </div>
+        )}
+      </header>
+      <div className="app-body">
       <Sidebar
           open={leftOpen}
           onNewTask={newTask}
@@ -1783,6 +1898,7 @@ export default function App() {
           onCloseFile={() => setSelectedFile(null)}
           running={running}
         />
+      </div>
 
       {showSettings && (
         <SettingsModal
