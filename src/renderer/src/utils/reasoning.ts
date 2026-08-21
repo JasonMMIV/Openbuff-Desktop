@@ -18,16 +18,17 @@ export function getReasoningOptionsForModel(modelId: string | undefined): string
     return normalizedOpts
   }
 
-  // Fallback heuristic for unknown models OR models that only had ['default'] in the API (like hy3-free)
-  const m = bareModel.toLowerCase()
-  if (m.includes('o1') || m.includes('o3') || m.includes('gpt-4.5') || m.includes('gpt-5') || m.includes('hy3') || m.includes('gemini') || m.includes('claude')) {
+  // Fallback heuristic based on OmniChat's reasoning RegExp
+  const reasoningRegex = /(gpt-oss|gpt-5(?!-chat)|o\d|gemini-(?:2\.5|3).*|gemini-(?:flash-latest|pro-latest)|gemini-3-pro-image-preview|claude|qwen-?3|doubao.+1([-.])6|grok-4|kimi-k(?:2|3)|step-3|intern-s1|glm-4([-.])(?:5|6|7)|glm-5|minimax-m2|deepseek-(?:r1|v3\.1|v3\.2|v4)|deepseek-reasoner|mimo-v2-flash|hy3)/i
+
+  if (reasoningRegex.test(bareModel)) {
+    if (bareModel.toLowerCase().includes('grok')) {
+      return ['default', 'low', 'medium', 'high', 'max']
+    }
     return ['default', 'low', 'medium', 'high']
   }
-  if (m.includes('grok')) {
-    return ['default', 'low', 'medium', 'high', 'max']
-  }
   
-  // General fallback for unknown models (e.g. Musespark, DeepSeek, etc.)
-  // Most open source or unknown models do not support `reasoning_effort` API parameter.
+  // General fallback for unknown models (e.g. Musespark, unknown open source models, etc.)
+  // Most generic open source models do not support the `reasoning_effort` parameter.
   return ['default']
 }
