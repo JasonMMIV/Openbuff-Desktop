@@ -3,7 +3,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join } from 'path'
 import { attachWindow, runPrompt, abortRun, isRunning, getLastLocalAgents, respondApproval } from './openbuff'
-import { createLocalAgent, loadProjectLocalAgents, type CreateLocalAgentInput } from './agents/local-agents'
+import { createLocalAgent, loadProjectLocalAgents, deleteLocalAgent, readLocalAgentFile, saveLocalAgentFile, type CreateLocalAgentInput } from './agents/local-agents'
 import {
   getAppSettings,
   saveProviderApiKey,
@@ -355,6 +355,18 @@ function registerIpc(): void {
 
   ipcMain.handle('openbuff:createLocalAgent', (_e, payload: CreateLocalAgentInput) => {
     return createLocalAgent(payload)
+  })
+
+  ipcMain.handle('openbuff:deleteLocalAgent', (_e, payload: { cwd: string; filePath?: string; id?: string }) => {
+    return deleteLocalAgent(payload)
+  })
+
+  ipcMain.handle('openbuff:readLocalAgentFile', (_e, payload: { filePath: string }) => {
+    return readLocalAgentFile(payload)
+  })
+
+  ipcMain.handle('openbuff:saveLocalAgentFile', (_e, payload: { filePath: string; content: string }) => {
+    return saveLocalAgentFile(payload)
   })
 
   ipcMain.handle('openbuff:readSkillFile', (_e, path: string) => {

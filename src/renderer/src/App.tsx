@@ -289,6 +289,7 @@ export default function App() {
   const [rightTab, setRightTab] = useState<RightTab>('activity')
 
   const [showSettings, setShowSettings] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<'general' | 'providers' | 'theme' | 'routing' | 'agents'>('general')
   const [showAgentWizard, setShowAgentWizard] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -1622,7 +1623,22 @@ export default function App() {
         )}
       </header>
       <div className="app-body">
-        {showSettings ? (
+        {showAgentWizard && cwd ? (
+          <AgentWizardModal
+            cwd={cwd}
+            onClose={() => {
+              setShowAgentWizard(false)
+              setShowSettings(true)
+              setSettingsTab('agents')
+            }}
+            onCreated={({ id, filePath }) => {
+              setShowAgentWizard(false)
+              setShowSettings(true)
+              setSettingsTab('agents')
+              setNotice(`Created ${id}. Reload Custom Agents in Settings to use it. (${filePath})`)
+            }}
+          />
+        ) : showSettings ? (
           <SettingsModal
             onClose={handleCloseSettings}
             onCreateAgent={openAgentWizard}
@@ -1631,6 +1647,7 @@ export default function App() {
             onToggleTheme={toggleTheme}
             colorTheme={colorTheme}
             onSelectColorTheme={setColorTheme}
+            initialTab={settingsTab}
           />
         ) : (
           <>
@@ -1968,17 +1985,6 @@ export default function App() {
           </>
         )}
       </div>
-
-      {showAgentWizard && cwd && (
-        <AgentWizardModal
-          cwd={cwd}
-          onClose={() => setShowAgentWizard(false)}
-          onCreated={({ id, filePath }) => {
-            setShowAgentWizard(false)
-            setNotice(`Created ${id}. Reload Custom Agents in Settings to use it. (${filePath})`)
-          }}
-        />
-      )}
 
       {pendingRevert && (
         <div className="modal-backdrop" onClick={() => setPendingRevert(null)}>

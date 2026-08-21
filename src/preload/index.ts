@@ -53,6 +53,12 @@ const api = {
   listSkills: (cwd: string) => ipcRenderer.invoke('openbuff:listSkills', cwd),
   listLocalAgents: (cwd: string) => ipcRenderer.invoke('openbuff:listLocalAgents', cwd),
   createLocalAgent: (payload: unknown) => ipcRenderer.invoke('openbuff:createLocalAgent', payload),
+  deleteLocalAgent: (payload: { cwd: string; filePath?: string; id?: string }) =>
+    ipcRenderer.invoke('openbuff:deleteLocalAgent', payload),
+  readLocalAgentFile: (payload: { filePath: string }) =>
+    ipcRenderer.invoke('openbuff:readLocalAgentFile', payload),
+  saveLocalAgentFile: (payload: { filePath: string; content: string }) =>
+    ipcRenderer.invoke('openbuff:saveLocalAgentFile', payload),
   readSkillFile: (path: string) => ipcRenderer.invoke('openbuff:readSkillFile', path),
   listProjects: () => ipcRenderer.invoke('openbuff:listProjects'),
   saveTask: (payload: { cwd: string; prompt: string }) => ipcRenderer.invoke('openbuff:saveTask', payload),

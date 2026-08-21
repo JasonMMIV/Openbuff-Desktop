@@ -31,6 +31,8 @@ export interface LocalAgentInfo {
   spawnerPrompt: string
   /** Absolute path of the agent file (may point into the temp mirror for .ts sources). */
   source: string
+  filePath: string
+  scope: 'project' | 'home'
 }
 
 export interface LocalAgentsResult {
@@ -109,19 +111,25 @@ function transpileToMjs(file: string, outDir: string, rel: string): void {
  * loader which handles dynamic imports + validation.
  */
 export async function loadProjectLocalAgents(cwd: string): Promise<LocalAgentsResult> {
-  const roots = [join(homedir(), '.agents'), join(cwd, '.agents')]
+  const homeAgentsDir = join(homedir(), '.agents')
+  const projectAgentsDir = cwd ? join(cwd, '.agents') : ''
+  const roots = [homeAgentsDir, projectAgentsDir].filter(Boolean)
   const uniqueRoots = roots.filter((r, i) => roots.indexOf(r) === i && existsSync(r))
 
   const files: string[] = []
   for (const root of uniqueRoots) scanAgentFiles(root, files)
   if (files.length === 0) return { agents: [], validationErrors: [] }
 
+  const originalFileMap = new Map<string, { filePath: string; scope: 'project' | 'home' }>()
   const tempDir = mkdtempSync(join(tmpdir(), 'openbuff-agents-'))
   const fileErrors: { agentId: string; filePath: string; message: string }[] = []
   try {
     for (const file of files) {
       const root = uniqueRoots.find((r) => file.startsWith(r + sep)) ?? uniqueRoots[0]
       const rel = relative(root, file)
+      const isHome = file.startsWith(homeAgentsDir + sep)
+      const baseNameWithoutExt = rel.replace(/\.[^.]+$/, '').replace(/\\/g, '/')
+      originalFileMap.set(baseNameWithoutExt, { filePath: file, scope: isHome ? 'home' : 'project' })
       const ext = extname(file).toLowerCase()
       try {
         if (ext === '.ts' || ext === '.tsx') {
@@ -143,12 +151,20 @@ export async function loadProjectLocalAgents(cwd: string): Promise<LocalAgentsRe
       'validationErrors' in result ? result.validationErrors : []
 
     return {
-      agents: Object.values(agents).map((a) => ({
-        id: a.id,
-        displayName: a.displayName ?? a.id,
-        spawnerPrompt: a.spawnerPrompt ?? '',
-        source: a._sourceFilePath ?? ''
-      })),
+      agents: Object.values(agents).map((a) => {
+        const fileInfo = originalFileMap.get(a.id) ?? {
+          filePath: a._sourceFilePath ?? '',
+          scope: (a._sourceFilePath && a._sourceFilePath.startsWith(homeAgentsDir)) ? 'home' : 'project'
+        }
+        return {
+          id: a.id,
+          displayName: a.displayName ?? a.id,
+          spawnerPrompt: a.spawnerPrompt ?? '',
+          source: a._sourceFilePath ?? '',
+          filePath: fileInfo.filePath,
+          scope: fileInfo.scope
+        }
+      }),
       validationErrors: [...fileErrors, ...validationErrors.map((e) => ({ agentId: e.agentId, filePath: e.filePath, message: e.message }))]
     }
   } finally {
@@ -191,7 +207,6 @@ export function createLocalAgent(input: CreateLocalAgentInput): CreateLocalAgent
   const rootResolved = resolve(input.scope === 'home' ? join(homedir(), '.agents') : join(input.cwd, '.agents'))
   const filePath = resolve(rootResolved, `${id}.ts`)
   if (!filePath.startsWith(rootResolved + sep)) return { ok: false, error: 'Invalid agent file path.' }
-  if (existsSync(filePath)) return { ok: false, error: `An agent with the ID "${id}" already exists.` }
 
   const toolNames = [...new Set(input.toolNames.map((tool) => tool.trim()).filter(Boolean))]
   const source = [
@@ -222,6 +237,61 @@ export function createLocalAgent(input: CreateLocalAgentInput): CreateLocalAgent
     mkdirSync(rootResolved, { recursive: true })
     writeFileSync(filePath, source, 'utf-8')
     return { ok: true, id, filePath }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Delete a custom local agent file */
+export function deleteLocalAgent(input: { cwd: string; filePath?: string; id?: string }): { ok: boolean; error?: string } {
+  let targetPath = input.filePath
+  if (!targetPath && input.id) {
+    const projectPath = input.cwd ? join(input.cwd, '.agents', `${input.id}.ts`) : ''
+    const homePath = join(homedir(), '.agents', `${input.id}.ts`)
+    if (projectPath && existsSync(projectPath)) targetPath = projectPath
+    else if (existsSync(homePath)) targetPath = homePath
+    else {
+      for (const ext of ['.tsx', '.js', '.mjs', '.cjs']) {
+        const pPath = input.cwd ? join(input.cwd, '.agents', `${input.id}${ext}`) : ''
+        const hPath = join(homedir(), '.agents', `${input.id}${ext}`)
+        if (pPath && existsSync(pPath)) { targetPath = pPath; break }
+        if (existsSync(hPath)) { targetPath = hPath; break }
+      }
+    }
+  }
+  if (!targetPath || !existsSync(targetPath)) {
+    return { ok: false, error: 'Agent file not found.' }
+  }
+  try {
+    rmSync(targetPath, { force: true })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Read raw source content of an agent file */
+export function readLocalAgentFile(input: { filePath: string }): { ok: boolean; content?: string; error?: string } {
+  try {
+    if (!existsSync(input.filePath)) {
+      return { ok: false, error: 'Agent file not found.' }
+    }
+    const content = readFileSync(input.filePath, 'utf-8')
+    return { ok: true, content }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
+}
+
+/** Save updated raw source content of an agent file */
+export function saveLocalAgentFile(input: { filePath: string; content: string }): { ok: boolean; error?: string } {
+  try {
+    const parent = input.filePath.slice(0, input.filePath.lastIndexOf(sep))
+    if (parent && !existsSync(parent)) {
+      mkdirSync(parent, { recursive: true })
+    }
+    writeFileSync(input.filePath, input.content, 'utf-8')
+    return { ok: true }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

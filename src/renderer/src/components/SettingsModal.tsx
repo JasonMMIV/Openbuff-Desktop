@@ -3,6 +3,7 @@ import type { ColorTheme } from '../App'
 import {
   ActivityIcon,
   ChevronLeftIcon,
+  EditIcon,
   LayersIcon,
   MoonIcon,
   PaletteIcon,
@@ -20,6 +21,15 @@ import CustomSelect from './CustomSelect'
 
 type ProviderType = 'openai-compatible' | 'anthropic-compatible'
 type SettingsTab = 'providers' | 'general' | 'theme' | 'routing' | 'agents'
+
+export interface LocalAgentItem {
+  id: string
+  displayName: string
+  spawnerPrompt: string
+  source?: string
+  filePath?: string
+  scope?: 'project' | 'home'
+}
 
 interface ProviderDraft {
   id: string
@@ -137,6 +147,7 @@ interface Props {
   onToggleTheme: () => void
   colorTheme: ColorTheme
   onSelectColorTheme: (theme: ColorTheme) => void
+  initialTab?: SettingsTab
 }
 
 const COLOR_THEMES: { id: ColorTheme; label: string; previewColor: string; description: string }[] = [
@@ -186,9 +197,16 @@ export default function SettingsModal({
   theme,
   onToggleTheme,
   colorTheme,
-  onSelectColorTheme
+  onSelectColorTheme,
+  initialTab
 }: Props) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general')
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab ?? 'general')
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab)
+    }
+  }, [initialTab])
   const [providers, setProviders] = useState<ProviderDraft[]>([])
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null)
   const [fetchedModelsMap, setFetchedModelsMap] = useState<Record<string, string[]>>({})
@@ -206,9 +224,15 @@ export default function SettingsModal({
   const [routeDraftAgent, setRouteDraftAgent] = useState('')
   const [routeDraftModel, setRouteDraftModel] = useState('')
   const [cwd, setCwd] = useState('')
-  const [localAgents, setLocalAgents] = useState<{ id: string; displayName: string; spawnerPrompt: string }[]>([])
+  const [localAgents, setLocalAgents] = useState<LocalAgentItem[]>([])
   const [localAgentErrors, setLocalAgentErrors] = useState<{ agentId: string; message: string }[]>([])
   const [loadingAgents, setLoadingAgents] = useState(false)
+  const [editingAgent, setEditingAgent] = useState<{ id: string; displayName: string; filePath: string; content: string } | null>(null)
+  const [savingAgentCode, setSavingAgentCode] = useState(false)
+  const [agentEditError, setAgentEditError] = useState<string | null>(null)
+  const [deletingAgent, setDeletingAgent] = useState<{ id: string; displayName: string; filePath: string } | null>(null)
+  const [deletingInProgress, setDeletingInProgress] = useState(false)
+  const [agentActionNotice, setAgentActionNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [fetchingId, setFetchingId] = useState<string | null>(null)
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -228,8 +252,8 @@ export default function SettingsModal({
       })
       setAllAgentIds(['base2', 'code-reviewer', 'editor', 'file-picker', 'planner', 'researcher-web', 'thinker'])
       setLocalAgents([
-        { id: 'doc-writer', displayName: 'Doc Writer', spawnerPrompt: 'Writes documentation' },
-        { id: 'qa-agent', displayName: 'QA Agent', spawnerPrompt: 'Runs acceptance checks' }
+        { id: 'doc-writer', displayName: 'Doc Writer', spawnerPrompt: 'Writes documentation', scope: 'project', filePath: 'C:/project/.agents/doc-writer.ts' },
+        { id: 'qa-agent', displayName: 'QA Agent', spawnerPrompt: 'Runs acceptance checks', scope: 'home', filePath: '~/.agents/qa-agent.ts' }
       ])
       setIsLoaded(true)
       return
@@ -264,7 +288,7 @@ export default function SettingsModal({
       setCwd((state as { cwd?: string }).cwd ?? '')
       if ((state as { cwd?: string }).cwd) {
         const res = (await window.openbuff.listLocalAgents((state as { cwd?: string }).cwd as string)) as {
-          agents: { id: string; displayName: string; spawnerPrompt: string }[]
+          agents: LocalAgentItem[]
           validationErrors: { agentId: string; message: string }[]
         }
         setLocalAgents(res.agents ?? [])
@@ -353,8 +377,8 @@ export default function SettingsModal({
   const refreshLocalAgents = async () => {
     if (typeof window.openbuff === 'undefined') {
       setLocalAgents([
-        { id: 'doc-writer', displayName: 'Doc Writer', spawnerPrompt: 'Writes documentation' },
-        { id: 'qa-agent', displayName: 'QA Agent', spawnerPrompt: 'Runs acceptance checks' }
+        { id: 'doc-writer', displayName: 'Doc Writer', spawnerPrompt: 'Writes documentation', scope: 'project', filePath: 'C:/project/.agents/doc-writer.ts' },
+        { id: 'qa-agent', displayName: 'QA Agent', spawnerPrompt: 'Runs acceptance checks', scope: 'home', filePath: '~/.agents/qa-agent.ts' }
       ])
       return
     }
@@ -362,13 +386,96 @@ export default function SettingsModal({
     setLoadingAgents(true)
     try {
       const res = (await window.openbuff.listLocalAgents(cwd)) as {
-        agents: { id: string; displayName: string; spawnerPrompt: string }[]
+        agents: LocalAgentItem[]
         validationErrors: { agentId: string; message: string }[]
       }
       setLocalAgents(res.agents ?? [])
       setLocalAgentErrors((res.validationErrors ?? []).map((e) => ({ agentId: e.agentId, message: e.message })))
     } finally {
       setLoadingAgents(false)
+    }
+  }
+
+  const handleStartEditAgent = async (agent: LocalAgentItem) => {
+    setAgentEditError(null)
+    const filePath = agent.filePath || agent.source || ''
+    if (!filePath) {
+      setAgentEditError('No file path found for this agent.')
+      return
+    }
+    if (typeof window.openbuff === 'undefined') {
+      setEditingAgent({
+        id: agent.id,
+        displayName: agent.displayName,
+        filePath,
+        content: `const definition = {\n  id: ${JSON.stringify(agent.id)},\n  displayName: ${JSON.stringify(agent.displayName)},\n  spawnerPrompt: ${JSON.stringify(agent.spawnerPrompt)},\n  toolNames: ['read_files', 'list_directory'],\n  systemPrompt: 'You are a helpful agent specialist.',\n  instructionsPrompt: '1. Handle the task efficiently.'\n}\n\nexport default definition\n`
+      })
+      return
+    }
+    try {
+      const res = (await window.openbuff.readLocalAgentFile({ filePath })) as { ok: boolean; content?: string; error?: string }
+      if (!res.ok || typeof res.content === 'undefined') {
+        setAgentEditError(res.error ?? 'Failed to read agent source file.')
+        return
+      }
+      setEditingAgent({
+        id: agent.id,
+        displayName: agent.displayName,
+        filePath,
+        content: res.content
+      })
+    } catch (err) {
+      setAgentEditError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleSaveAgentCode = async () => {
+    if (!editingAgent) return
+    setSavingAgentCode(true)
+    setAgentEditError(null)
+    try {
+      if (typeof window.openbuff === 'undefined') {
+        setAgentActionNotice(`Updated ${editingAgent.displayName}`)
+        setEditingAgent(null)
+        return
+      }
+      const res = (await window.openbuff.saveLocalAgentFile({ filePath: editingAgent.filePath, content: editingAgent.content })) as { ok: boolean; error?: string }
+      if (!res.ok) {
+        setAgentEditError(res.error ?? 'Failed to save agent file.')
+        return
+      }
+      setAgentActionNotice(`Successfully updated ${editingAgent.displayName}`)
+      setEditingAgent(null)
+      await refreshLocalAgents()
+    } catch (err) {
+      setAgentEditError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSavingAgentCode(false)
+    }
+  }
+
+  const handleConfirmDeleteAgent = async () => {
+    if (!deletingAgent) return
+    setDeletingInProgress(true)
+    try {
+      if (typeof window.openbuff === 'undefined') {
+        setLocalAgents((prev) => prev.filter((a) => a.id !== deletingAgent.id))
+        setAgentActionNotice(`Deleted ${deletingAgent.displayName}`)
+        setDeletingAgent(null)
+        return
+      }
+      const res = (await window.openbuff.deleteLocalAgent({ cwd, filePath: deletingAgent.filePath, id: deletingAgent.id })) as { ok: boolean; error?: string }
+      if (!res.ok) {
+        setError(res.error ?? 'Failed to delete agent.')
+        return
+      }
+      setAgentActionNotice(`Successfully deleted ${deletingAgent.displayName}`)
+      setDeletingAgent(null)
+      await refreshLocalAgents()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeletingInProgress(false)
     }
   }
 
@@ -564,14 +671,12 @@ export default function SettingsModal({
     {
       id: 'routing',
       label: 'Agent Routing',
-      icon: <ActivityIcon size={16} />,
-      badge: Object.keys(agentRouting).length || undefined
+      icon: <ActivityIcon size={16} />
     },
     {
       id: 'agents',
       label: 'Custom Agents',
-      icon: <SpecialistIcon size={16} />,
-      badge: localAgents.length || undefined
+      icon: <SpecialistIcon size={16} />
     }
   ]
 
@@ -1258,7 +1363,7 @@ export default function SettingsModal({
                   <button
                     className="btn ghost small"
                     onClick={onCreateAgent}
-                    title="Create a custom agent with the /init wizard"
+                    title="Create a custom agent"
                   >
                     <PlusIcon size={12} /> Create Agent
                   </button>
@@ -1274,8 +1379,20 @@ export default function SettingsModal({
                 </div>
               </div>
               <p className="hint">
-                Custom agents are loaded from <code>.agents/</code> in your project or home directory (same as the CLI's <code>/init</code>). Files can be <code>.ts</code>, <code>.js</code>, <code>.mjs</code> or <code>.cjs</code> and are merged over the bundled agents.
+                Custom agents are loaded from <code>.agents/</code> in your project or home directory. Files can be <code>.ts</code>, <code>.js</code>, <code>.mjs</code> or <code>.cjs</code> and are merged over the bundled agents.
               </p>
+
+              {agentActionNotice && (
+                <div className="test-msg success" style={{ marginBottom: '8px' }}>
+                  {agentActionNotice}
+                </div>
+              )}
+
+              {agentEditError && !editingAgent && (
+                <div className="test-msg fail" style={{ marginBottom: '8px' }}>
+                  {agentEditError}
+                </div>
+              )}
 
               {localAgents.length === 0 && !loadingAgents ? (
                 <div className="settings-empty-card">
@@ -1287,9 +1404,50 @@ export default function SettingsModal({
               ) : (
                 <div className="local-agent-list">
                   {localAgents.map((a) => (
-                    <div key={a.id} className="local-agent-row" title={a.spawnerPrompt}>
-                      <span className="route-agent">{a.id}</span>
-                      <span className="local-agent-name">{a.displayName}</span>
+                    <div key={a.id} className="local-agent-card">
+                      <div className="local-agent-card-header">
+                        <div className="local-agent-title-box">
+                          <div className="local-agent-icon-mark">
+                            <SpecialistIcon size={16} />
+                          </div>
+                          <div>
+                            <div className="local-agent-name-row">
+                              <strong className="local-agent-name">{a.displayName}</strong>
+                              <span className="route-agent">{a.id}</span>
+                              <span className={`local-agent-scope-badge ${a.scope === 'home' ? 'global' : 'project'}`}>
+                                {a.scope === 'home' ? 'Global' : 'Project'}
+                              </span>
+                            </div>
+                            {a.spawnerPrompt && <p className="local-agent-desc">{a.spawnerPrompt}</p>}
+                          </div>
+                        </div>
+                        <div className="local-agent-card-actions">
+                          <button
+                            type="button"
+                            className="btn ghost small"
+                            onClick={() => void handleStartEditAgent(a)}
+                            title="Edit agent code definition"
+                          >
+                            <EditIcon size={12} />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn ghost danger-hover small"
+                            onClick={() => setDeletingAgent({ id: a.id, displayName: a.displayName, filePath: a.filePath || a.source || '' })}
+                            title="Delete agent file"
+                          >
+                            <TrashIcon size={12} />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                      {a.filePath && (
+                        <div className="local-agent-card-footer">
+                          <span className="local-agent-path-label">File:</span>
+                          <code className="local-agent-filepath">{a.filePath}</code>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1308,6 +1466,113 @@ export default function SettingsModal({
           )}
         </div>
       </section>
+
+      {/* Edit Custom Agent Modal */}
+      {editingAgent && (
+        <div className="modal-backdrop agent-editor-backdrop" onClick={() => !savingAgentCode && setEditingAgent(null)}>
+          <div className="modal agent-editor-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="agent-editor-header">
+              <div className="agent-editor-header-info">
+                <div className="agent-editor-header-title">
+                  <SpecialistIcon size={18} />
+                  <span>Edit Custom Agent</span>
+                  <span className="route-agent">{editingAgent.id}</span>
+                </div>
+                <code className="agent-editor-filepath">{editingAgent.filePath}</code>
+              </div>
+              <button
+                type="button"
+                className="mini-btn"
+                onClick={() => !savingAgentCode && setEditingAgent(null)}
+                title="Close"
+              >
+                <XIcon size={15} />
+              </button>
+            </div>
+
+            <div className="agent-editor-body">
+              {agentEditError && <div className="test-msg fail">{agentEditError}</div>}
+              <div className="agent-editor-code-container">
+                <textarea
+                  className="agent-editor-textarea"
+                  value={editingAgent.content}
+                  onChange={(e) => setEditingAgent({ ...editingAgent, content: e.target.value })}
+                  placeholder="// TypeScript Agent Definition"
+                  spellCheck={false}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="agent-editor-footer">
+              <span className="hint">Changes take effect immediately upon saving and reloading.</span>
+              <div className="agent-editor-footer-actions">
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => setEditingAgent(null)}
+                  disabled={savingAgentCode}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn primary"
+                  onClick={() => void handleSaveAgentCode()}
+                  disabled={savingAgentCode}
+                >
+                  {savingAgentCode ? 'Saving…' : 'Save Agent'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Agent Confirmation Modal */}
+      {deletingAgent && (
+        <div className="modal-backdrop" onClick={() => !deletingInProgress && setDeletingAgent(null)}>
+          <div className="modal agent-delete-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="agent-delete-header">
+              <div className="agent-delete-title">
+                <TrashIcon size={18} />
+                <span>Delete Custom Agent</span>
+              </div>
+              <button
+                type="button"
+                className="mini-btn"
+                onClick={() => !deletingInProgress && setDeletingAgent(null)}
+                title="Cancel"
+              >
+                <XIcon size={14} />
+              </button>
+            </div>
+            <div className="agent-delete-body">
+              <p>Are you sure you want to delete <strong>{deletingAgent.displayName}</strong> (<code>{deletingAgent.id}</code>)?</p>
+              <p className="hint">This will permanently delete the agent definition file from your disk:</p>
+              <code className="agent-delete-path">{deletingAgent.filePath}</code>
+            </div>
+            <div className="agent-delete-footer">
+              <button
+                type="button"
+                className="btn ghost"
+                onClick={() => setDeletingAgent(null)}
+                disabled={deletingInProgress}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn danger"
+                onClick={() => void handleConfirmDeleteAgent()}
+                disabled={deletingInProgress}
+              >
+                {deletingInProgress ? 'Deleting…' : 'Delete Agent'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preset Picker Modal */}
       {showPresetPicker && (
