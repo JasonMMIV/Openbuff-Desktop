@@ -17,6 +17,11 @@ export interface TodoItem {
   completed: boolean
 }
 
+export interface FileChange {
+  path: string
+  action: 'create' | 'modify' | 'delete'
+}
+
 export interface UiEvent {
   type: string
   text?: string
@@ -26,6 +31,7 @@ export interface UiEvent {
   model?: string
   message?: string
   files?: string[]
+  changedFiles?: FileChange[]
   used?: number
   max?: number
   totalCost?: number
@@ -73,6 +79,73 @@ function extractMutationFiles(toolName: string, input: unknown): string[] {
       return []
   }
   return paths
+}
+
+/** Extract file changes with action types (create/modify/delete) from tool input. */
+function extractFileChanges(toolName: string, input: unknown): FileChange[] {
+  if (!input || typeof input !== 'object') return []
+  const rec = input as Record<string, unknown>
+  const changes: FileChange[] = []
+  const add = (p: unknown, action: FileChange['action']): void => {
+    if (typeof p === 'string' && p.trim()) changes.push({ path: p.trim(), action })
+  }
+  switch (toolName) {
+    case 'edit_transaction': {
+      const edits = rec.edits
+      if (Array.isArray(edits)) {
+        for (const e of edits) {
+          if (e && typeof e === 'object') {
+            const editRec = e as Record<string, unknown>
+            // Determine action from the edit operation
+            const operation = String(editRec.operation ?? '').toLowerCase()
+            if (operation === 'create' || operation === 'new_file') {
+              add(editRec.path, 'create')
+            } else if (operation === 'delete' || operation === 'remove') {
+              add(editRec.path, 'delete')
+            } else {
+              add(editRec.path, 'modify')
+            }
+          }
+        }
+      }
+      break
+    }
+    case 'apply_patch': {
+      const op = rec.operation
+      if (op && typeof op === 'object') {
+        const opRec = op as Record<string, unknown>
+        const operation = String(opRec.operation ?? '').toLowerCase()
+        if (operation === 'create') {
+          add(opRec.path, 'create')
+        } else if (operation === 'delete') {
+          add(opRec.path, 'delete')
+        } else {
+          add(opRec.path, 'modify')
+        }
+      }
+      add(rec.path, 'modify')
+      break
+    }
+    case 'write_file':
+    case 'str_replace':
+    case 'replace_range':
+    case 'rewrite_symbol':
+      add(rec.path, 'modify')
+      break
+    case 'create_file':
+      add(rec.path, 'create')
+      break
+    case 'move_file':
+      add(rec.path, 'delete')
+      add(rec.newPath, 'create')
+      break
+    case 'delete_file':
+      add(rec.path, 'delete')
+      break
+    default:
+      return []
+  }
+  return changes
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -217,6 +290,9 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
       // Track files this run modifies so the UI can offer "revert changes up to this point".
       const mutated = extractMutationFiles(base.toolName, e.input)
       if (mutated.length > 0) base.files = mutated
+      // Extract file changes with action types for the UI summary
+      const fileChanges = extractFileChanges(base.toolName, e.input)
+      if (fileChanges.length > 0) base.changedFiles = fileChanges
       break
     case 'tool_start':
       base.toolName = String(e.toolName ?? '')

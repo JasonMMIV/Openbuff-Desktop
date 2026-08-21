@@ -5,6 +5,7 @@ import SettingsModal from './components/SettingsModal'
 import AgentWizardModal from './components/AgentWizardModal'
 import Composer, { type Attachment, type SkillInfo } from './components/Composer'
 import { AssistantBubble, TodoCard, ToolCard, UserBubble, type TodoTodo, type ToolItem } from './components/ChatMessage'
+import { FileChangesSummary, type FileChange } from './components/FileChangesSummary'
 import {
   AlertCircleIcon,
   AppIcon,
@@ -35,6 +36,7 @@ type ChatItem =
   | { kind: 'user'; text: string }
   | { kind: 'assistant'; text: string; reasoning?: string }
   | { kind: 'tool'; tool: ToolItem }
+  | { kind: 'file-changes'; files: FileChange[] }
   | { kind: 'system'; text: string }
 
 /** Silent background polling / internal tools that should be hidden from the UI timeline */
@@ -118,7 +120,11 @@ const PREVIEW_ITEMS: ChatItem[] = [
   {
     kind: 'assistant',
     text: 'Done:\n\n- `divide` now throws a `RangeError` when the divisor is 0\n- The original calculation logic is preserved\n\n```js\nexport function divide(a, b) {\n  if (b === 0) {\n    throw new RangeError(\'Cannot divide by zero\')\n  }\n  return a / b\n}\n```'
-  }
+  },
+  { kind: 'file-changes', files: [
+    { path: 'src/calculator.js', action: 'modify' as const },
+    { path: 'src/utils.js', action: 'create' as const }
+  ] }
 ]
 
 function flattenTree(nodes: TreeNode[], cwd: string): string[] {
@@ -313,6 +319,7 @@ export default function App() {
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const toolIndexRef = useRef(-1)
   const changedFilesRef = useRef<string[]>([])
+  const accumulatedFileChangesRef = useRef<FileChange[]>([])
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const currentTaskRef = useRef<string | null>(null)
@@ -597,6 +604,10 @@ export default function App() {
         if (event.files?.length) {
           changedFilesRef.current = [...new Set([...changedFilesRef.current, ...event.files])]
         }
+        // Collect file changes with action types for the summary
+        if (event.changedFiles && event.changedFiles.length > 0) {
+          accumulatedFileChangesRef.current = [...accumulatedFileChangesRef.current, ...event.changedFiles]
+        }
         if (event.toolName === 'query_index' && event.type === 'tool_call') {
           setEvents((prev) => [...prev.slice(-299), event])
         }
@@ -659,6 +670,22 @@ export default function App() {
           const cost = event.totalCost
           setTotalCost((c) => c + cost)
         }
+        // Insert file changes summary if files were modified
+        const fileChanges = accumulatedFileChangesRef.current
+        if (fileChanges.length > 0) {
+          // Deduplicate by path, keeping the most severe action
+          const actionPriority: Record<string, number> = { delete: 3, create: 2, modify: 1 }
+          const deduped = new Map<string, FileChange>()
+          for (const fc of fileChanges) {
+            const existing = deduped.get(fc.path)
+            if (!existing || (actionPriority[fc.action] ?? 0) > (actionPriority[existing.action] ?? 0)) {
+              deduped.set(fc.path, fc)
+            }
+          }
+          const summaryFiles = Array.from(deduped.values())
+          setChatItems((prev) => [...prev, { kind: 'file-changes', files: summaryFiles }])
+        }
+        accumulatedFileChangesRef.current = []
       }
 
       if (event.type === 'approval_request') {
@@ -862,6 +889,7 @@ export default function App() {
       streamRef.current = ''
       reasoningRef.current = ''
       changedFilesRef.current = []
+      accumulatedFileChangesRef.current = []
       setFollowups([])
       setChatItems((prev) => [...prev, { kind: 'user', text }, { kind: 'assistant', text: '' }])
       setRunning(true)
@@ -937,6 +965,8 @@ export default function App() {
                 ? { kind: 'tool', tool: item.tool }
                 : item.kind === 'assistant'
                 ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
+                : item.kind === 'file-changes'
+                ? { kind: 'file-changes', files: item.files }
                 : { kind: item.kind, text: item.text }
             )
             void window.openbuff.saveTaskTranscript({ taskId, messages })
@@ -1023,6 +1053,7 @@ export default function App() {
     reasoningRef.current = ''
     previousRunRef.current = null
     changedFilesRef.current = []
+    accumulatedFileChangesRef.current = []
     setAttachments([])
     setTokenUsage(null)
     setTotalCost(0)
@@ -1070,6 +1101,7 @@ export default function App() {
     reasoningRef.current = ''
     previousRunRef.current = null
     changedFilesRef.current = []
+    accumulatedFileChangesRef.current = []
     setFollowups([])
     setHistoryTask(null)
     // Undo the file changes in parallel so a large exchange doesn't stall the UI.
@@ -1766,6 +1798,13 @@ export default function App() {
                   return (
                     <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
                       <ToolCard tool={item.tool} isLast={isLastTool && running} />
+                    </div>
+                  )
+                }
+                if (item.kind === 'file-changes') {
+                  return (
+                    <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
+                      <FileChangesSummary files={item.files} />
                     </div>
                   )
                 }

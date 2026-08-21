@@ -2074,6 +2074,121 @@ textarea {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ─── File Changes Summary ──────────────────────────── */
+.file-changes-summary {
+  margin: var(--space-1) max(var(--space-6), calc((100% - 760px) / 2));
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.file-changes-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-base);
+}
+
+.file-changes-header:hover {
+  background: var(--bg-hover);
+}
+
+.file-changes-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-0);
+  flex-shrink: 0;
+}
+
+.file-changes-title {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text-0);
+  font-weight: 500;
+}
+
+.file-changes-detail {
+  font-size: 12px;
+  color: var(--text-2);
+  margin-left: var(--space-1);
+}
+
+.file-changes-toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  color: var(--text-2);
+}
+
+.file-changes-chevron-collapsed {
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+
+.file-changes-toggle svg:not(.file-changes-chevron-collapsed) {
+  transition: transform 0.15s ease;
+}
+
+.file-changes-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-changes-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-xs);
+  font-size: 12.5px;
+  transition: background var(--transition-fast);
+}
+
+.file-changes-item:hover {
+  background: var(--bg-hover);
+}
+
+.file-changes-action-icon {
+  font-size: 11px;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.file-changes-filepath {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.file-changes-dirname {
+  color: var(--text-2);
+}
+
+.file-changes-filename {
+  color: var(--text-0);
+  font-weight: 500;
+}
+
+.file-changes-action-label {
+  font-size: 11px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
 /* ─── Composer ───────────────────────────────────────── */
 .composer-wrap {
   position: relative;

@@ -7,6 +7,11 @@ export interface TodoItem {
   completed: boolean
 }
 
+export interface FileChange {
+  path: string
+  action: 'create' | 'modify' | 'delete'
+}
+
 export interface UiEvent {
   type: string
   text?: string
@@ -16,6 +21,7 @@ export interface UiEvent {
   model?: string
   message?: string
   files?: string[]
+  changedFiles?: FileChange[]
   used?: number
   max?: number
   totalCost?: number
