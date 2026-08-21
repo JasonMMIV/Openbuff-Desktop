@@ -996,7 +996,7 @@ export default function SettingsModal({
                             onChange={(e) => updateProvider(selectedProvider.id, { enableThinking: e.target.checked ? true : undefined })}
                           />
                           <span style={{ fontSize: '13px', fontWeight: 500 }}>
-                            Enable Extended Thinking (<code style={{ fontSize: '12px', background: 'var(--bg-card)', padding: '2px 4px', borderRadius: '4px' }}>enable_thinking: true</code>)
+                            Enable Extended Thinking (<code>enable_thinking: true</code>)
                           </span>
                         </label>
                         <p className="hint">
@@ -1013,14 +1013,8 @@ export default function SettingsModal({
                           placeholder='e.g. {"chat_template_args": {"enable_thinking": true}}'
                           spellCheck={false}
                           style={{
-                            width: '100%',
-                            fontFamily: 'monospace',
-                            fontSize: '12px',
-                            padding: '8px 10px',
-                            borderRadius: '6px',
-                            background: 'var(--bg-input, rgba(0,0,0,0.15))',
-                            border: '1px solid var(--border-color)',
-                            color: 'var(--text-primary)',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '12.5px',
                             resize: 'vertical'
                           }}
                         />
