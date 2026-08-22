@@ -6,6 +6,9 @@
  *    PTD's hardcoded keyword regex (implement/fix/refactor/update/create/add)
  *    fails on common verbs like "write"/"save"/"make" and all non-English input.
  * 2. Adds native web_search to base2 (DuckDuckGo, built into agent-runtime).
+ * 3. Appends prompt discipline sections: git_status retry suppression and
+ *    "invisible files" handling (the context tree omits gitignored paths, but
+ *    explicit reads still work — try the exact path before reporting missing).
  */
 
 const BASE_AGENT_IDS = [
@@ -40,6 +43,15 @@ export function patchBundledAgents<T extends Record<string, any>>(agents: T): T 
     let systemPrompt = typeof def.systemPrompt === 'string' ? def.systemPrompt : ''
     if (systemPrompt && !systemPrompt.includes('not a git repository')) {
       systemPrompt = `${systemPrompt}\n\n# Git status discipline\n\nIf \`git_status\` reports that the current directory is not a git repository (e.g. \`fatal: not a git repository\`), do not call \`git_status\` again for the rest of this turn. Rely on the runtime-injected Git observation instead.`
+    }
+
+    // The project tree shown in context omits some real files (e.g. paths matched
+    // by .gitignore are filtered from discovery for token economy). The desktop
+    // app surfaces those files in its File Tree and @-mention picker, so users
+    // will legitimately reference them. Never conclude a file does not exist
+    // just because it is absent from the tree.
+    if (!systemPrompt.includes('absent from the file tree')) {
+      systemPrompt = `${systemPrompt}\n\n# Invisible files discipline\n\nThe file tree you see may omit files that actually exist on disk (for example paths filtered out of discovery for token economy). If the user references a file or directory that is absent from the file tree, do NOT claim it does not exist. First attempt \`read_files\` (or \`list_directory\` for folders) with the exact relative path the user provided; only report a file as missing after that direct read fails.`
     }
 
     patched[id] = {

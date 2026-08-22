@@ -1,6 +1,6 @@
 import { execFile } from 'child_process'
 import { readdirSync, readFileSync, statSync, existsSync, rmSync, type Dirent } from 'fs'
-import { basename, join, relative, resolve, sep, isAbsolute } from 'path'
+import { basename, join, relative, resolve, isAbsolute } from 'path'
 import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
@@ -15,45 +15,11 @@ export interface TreeNode {
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'out', 'build', '.next', '.freebuff', '__pycache__', 'openbuff-src'])
 const SKIP_FILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'bun.lock', 'bun.lockb', '.DS_Store'])
 
-/** Minimal .gitignore matcher: supports `name`, `dir/`, `pattern/`, `*.ext`, `!negation`, and comments. */
-function loadGitignore(root: string): string[] {
-  try {
-    const content = readFileSync(join(root, '.gitignore'), 'utf-8')
-    return content
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith('#'))
-  } catch {
-    return []
-  }
-}
-
-function gitignoreMatches(patterns: string[], relPath: string): boolean {
-  if (patterns.length === 0) return false
-  const posix = relPath.split(sep).join('/')
-  let ignored = false
-  for (const raw of patterns) {
-    const negate = raw.startsWith('!')
-    const pat = (negate ? raw.slice(1) : raw).replace(/^\/+|\/+$/g, '')
-    if (!pat) continue
-    let match = false
-    if (pat.endsWith('/')) {
-      // Directory pattern: matches the dir itself or anything under it
-      match = posix === pat.slice(0, -1) || posix.startsWith(pat.slice(0, -1) + '/')
-    } else if (pat.includes('/')) {
-      match = posix === pat || posix.endsWith('/' + pat)
-    } else {
-      // Basename pattern (with optional wildcards)
-      const re = new RegExp('^' + pat.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$')
-      const parts = posix.split('/')
-      match = parts.some((p) => re.test(p))
-    }
-    if (match) ignored = !negate
-  }
-  return ignored
-}
-
-/** List a single directory's immediate children (lazy tree loading). */
+/**
+ * List a single directory's immediate children (lazy tree loading).
+ * Gitignored files are intentionally shown (matching the agent's ability to
+ * read them via read_files); only heavy/noise directories are excluded.
+ */
 export function listDir(root: string): TreeNode[] {
   let entries: Dirent[]
   try {
@@ -61,14 +27,11 @@ export function listDir(root: string): TreeNode[] {
   } catch {
     return []
   }
-  const ignorePatterns = loadGitignore(root)
   const nodes: TreeNode[] = []
   for (const entry of entries) {
     if (SKIP_DIRS.has(entry.name) || SKIP_FILES.has(entry.name)) continue
     if (entry.name.startsWith('.')) continue
     const full = join(root, entry.name)
-    const rel = relative(root, full)
-    if (gitignoreMatches(ignorePatterns, rel)) continue
     if (entry.isDirectory()) {
       nodes.push({ name: entry.name, path: full, type: 'dir' })
     } else if (entry.isFile()) {
