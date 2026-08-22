@@ -298,11 +298,9 @@ export function ThoughtBlock({
   reasoning: string
   streaming: boolean
 }) {
-  // While actively streaming the reasoning, expand by default.
-  // Once reasoning finishes or streaming ends, collapse by default.
-  // If the user manually toggles it, respect their preference.
+  // Collapsed by default; clicking the header expands it.
   const [userToggled, setUserToggled] = useState<boolean | null>(null)
-  const open = userToggled !== null ? userToggled : streaming
+  const open = userToggled ?? false
 
   const trimmed = reasoning.trim()
   if (!trimmed && !streaming) return null
