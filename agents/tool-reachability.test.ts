@@ -36,7 +36,15 @@ import synthesizer from './synthesizer/synthesizer'
 import testWriter from './test-writer/test-writer'
 import thinker from './thinker/thinker'
 import tmuxCli from './tmux-cli'
-import { quarantinedToolNames } from '@codebuff/common/tools/constants'
+import {
+  quarantinedToolNames,
+  toolNames,
+} from '@codebuff/common/tools/constants'
+import {
+  getToolMetadata,
+  removedToolNames,
+  toolMetadata,
+} from '@codebuff/common/tools/metadata'
 
 /**
  * Guards against the "registered but unusable" failure mode: a tool can be in
@@ -44,8 +52,9 @@ import { quarantinedToolNames } from '@codebuff/common/tools/constants'
  * `toolNames`, so no agent can ever call it. (This is exactly what happened to
  * read_outline / read_slices / rewrite_symbol on first add.)
  *
- * read_slices and apply_smart_patch were fully removed (schemas, handlers,
- * and registrations); they are no longer registered or prompt-visible.
+ * read_slices, apply_smart_patch, and apply_patch were fully removed
+ * (schemas, handlers, and registrations); they are no longer registered or
+ * prompt-visible.
  *
  * Every orchestrator mode must expose structural reads. Every non-plan
  * orchestrator exposes one canonical transaction surface; compatibility edit
@@ -56,7 +65,6 @@ const STRUCTURAL_READ_TOOLS = ['read_outline'] as const
 const LEGACY_DIRECT_EDIT_TOOLS = [
   'str_replace',
   'write_file',
-  'apply_patch',
   'replace_range',
   'rewrite_symbol',
 ] as const
@@ -75,11 +83,10 @@ const HARNESS_STATE_TOOLS = ['git_status'] as const
 describe('agent tool reachability', () => {
   for (const mode of ['default', 'fast'] as const) {
     test(`base2 (${mode}) exposes its intended read/mutation surface`, () => {
-      // Progressive disclosure is ON by default (CORE-only static list).
-      // Reachability asserts the intended full mutation surface.
-      const definition = createBase2(mode, {
-        progressiveToolDisclosure: false,
-      })
+      // Every non-core tier is unlocked by default, so the static list already
+      // IS the full mode-resolved surface (see
+      // agents/__tests__/base2-progressive-tool-disclosure.test.ts).
+      const definition = createBase2(mode)
       const tools = definition.toolNames ?? []
       const programmaticTools = definition.programmaticToolNames ?? []
       for (const tool of STRUCTURAL_READ_TOOLS) {
@@ -99,11 +106,7 @@ describe('agent tool reachability', () => {
   }
 
   test('execute-plan exposes direct execution without proposal indirection', () => {
-    const tools =
-      createBase2('default', {
-        executePlan: true,
-        progressiveToolDisclosure: false,
-      }).toolNames ?? []
+    const tools = createBase2('default', { executePlan: true }).toolNames ?? []
     expect(tools).toContain('edit_transaction')
     for (const tool of LEGACY_DIRECT_EDIT_TOOLS)
       expect(tools).not.toContain(tool)
@@ -114,6 +117,8 @@ describe('agent tool reachability', () => {
   })
 
   test('plan-only excludes project execution and proposal actions', () => {
+    // Plan mode relies on MODE gates, not tier gates: every non-core tier is
+    // unlocked by default, so these tools stay absent purely because of planOnly.
     const tools = createBase2('default', { planOnly: true }).toolNames ?? []
     expect(tools).not.toContain('edit_transaction')
     for (const tool of LEGACY_DIRECT_EDIT_TOOLS)
@@ -174,6 +179,31 @@ describe('agent tool reachability', () => {
           `${definition.displayName} must not expose quarantined tool ${toolName}`,
         ).not.toContain(toolName)
       }
+    }
+  })
+})
+
+describe('tool metadata reachability contract', () => {
+  test('registered metadata is never shadowed by removed-tool metadata', () => {
+    for (const toolName of toolNames) {
+      expect(getToolMetadata(toolName)).toEqual(toolMetadata[toolName])
+    }
+    for (const removed of removedToolNames) {
+      expect(
+        toolNames,
+        `${removed} must not be both registered and removed`,
+      ).not.toContain(removed)
+      expect(getToolMetadata(removed).reachability).toBe('removed')
+      expect(getToolMetadata(removed).deprecated).toBe(true)
+    }
+  })
+
+  test('live custom/MCP tool names are not reported as removed or deprecated', () => {
+    for (const toolName of ['my_custom_tool', 'mcp_server__do_thing']) {
+      const metadata = getToolMetadata(toolName)
+      expect(metadata.reachability).toBe('unknown')
+      expect(metadata.deprecated).toBe(false)
+      expect(metadata.includeInMutationSummary).toBe(false)
     }
   })
 })

@@ -50,10 +50,51 @@ outside mutations.
 Custom adapters should implement the optional capabilities they can guarantee:
 
 - `readTextRange` enables bounded reads of files larger than 10 MB.
+- `streamDirectory` keeps `list_directory` lazy, stopping one entry past the
+  listing cap instead of materializing every directory entry. Implementers must
+  (1) release the directory handle from the iterator's `return()` — the method
+  breaking out of `for await` invokes, which async generators and Node's `Dir`
+  already do — and (2) set `readdirView` to the adapter's own `readdir`. A
+  `readdirView` that is not the adapter's current `readdir` (for example after
+  a decorating adapter overrides `readdir`) makes callers ignore the capability
+  and fall back to full `readdir` materialization, with no diagnostic.
 - `createFileExclusive` prevents create collisions.
 - `conditionalCommit` prevents lost updates between validation and overwrite.
 - `conditionalDelete` guards deletions with an exact-byte expected hash.
 - `conditionalMove` requires the source hash and an absent destination.
+
+Declare `streamDirectory` only when you can guarantee both obligations above:
+the iterator releases its handle from `return()`, and `readdirView` is the
+adapter's current `readdir`. A mis-paired `readdirView` silently disables the
+capability — callers fall back to full `readdir` materialization with no
+diagnostic. Confirm the finished wiring with `supportsStreamDirectory()`, not
+by checking member presence:
+
+```ts
+import type fs from 'fs'
+import type { Dirent } from 'fs'
+import { supportsStreamDirectory } from '@openbuff/sdk'
+import type { CodebuffFileSystem } from '@openbuff/sdk'
+
+// Virtual directory store: path -> entries. Both views below serve this store.
+const directories = new Map<string, Dirent[]>()
+
+// The adapter's own `readdir` (a real one carries the full fs.promises
+// overload set, elided here).
+const readdir = (path: fs.PathLike): Promise<Dirent[]> =>
+  Promise.resolve(directories.get(String(path)) ?? [])
+
+// Breaking out of `for await` calls the generator's built-in `return()`, releasing the handle.
+async function* iterate(path: fs.PathLike): AsyncGenerator<Dirent> {
+  yield* directories.get(String(path)) ?? []
+}
+
+const streamDirectory: NonNullable<CodebuffFileSystem['streamDirectory']> =
+  Object.assign((path: fs.PathLike) => iterate(path), { readdirView: readdir })
+
+const adapter = { readdir, streamDirectory }
+console.log(supportsStreamDirectory(adapter)) // true
+```
 
 Tools that require a host process, such as terminal commands and configured
 validation hooks, are separate from the filesystem adapter. Virtual or remote
