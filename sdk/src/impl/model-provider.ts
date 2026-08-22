@@ -611,6 +611,8 @@ function createConfiguredOpenAICompatibleModel(
     includeUsage: undefined,
     supportsStructuredOutputs: provider.supportsStructuredOutputs,
     stringifyTextContent: resolvedModel.compatibility.stringifyTextContent,
+    enableThinking: (provider as any).enableThinking,
+    customBody: (provider as any).customBody,
   })
 }
 

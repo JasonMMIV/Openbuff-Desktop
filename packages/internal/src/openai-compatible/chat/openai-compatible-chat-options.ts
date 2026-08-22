@@ -18,6 +18,16 @@ export const openaiCompatibleProviderOptions = z.object({
    * Controls the verbosity of the generated text. Defaults to `medium`.
    */
   textVerbosity: z.string().optional(),
+
+  /**
+   * Enable thinking / reasoning tokens on providers like DashScope (Alibaba Cloud) for Qwen, DeepSeek-R1, etc.
+   */
+  enableThinking: z.boolean().optional(),
+
+  /**
+   * Thinking token budget for models supporting budget controls.
+   */
+  thinkingBudget: z.number().optional(),
 })
 
 export type OpenAICompatibleProviderOptions = z.infer<

@@ -61,6 +61,16 @@ export type OpenAICompatibleChatConfig = {
    * Some strict OpenAI-compatible APIs reject the content part array form.
    */
   stringifyTextContent?: boolean
+
+  /**
+   * Whether to enable thinking / reasoning tokens on providers like DashScope (Alibaba Cloud).
+   */
+  enableThinking?: boolean
+
+  /**
+   * Custom request body parameters to merge into the payload.
+   */
+  customBody?: Record<string, unknown>
 }
 
 const TOOL_CALL_METADATA_KEYS = new Set(['index', 'id', 'type', 'function'])
@@ -284,7 +294,21 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV2 {
           ),
         ),
 
-        reasoning_effort: compatibleOptions.reasoningEffort,
+        ...(this.config.customBody ?? {}),
+
+        ...(compatibleOptions.reasoningEffort && compatibleOptions.reasoningEffort !== 'default'
+          ? {
+              reasoning_effort: compatibleOptions.reasoningEffort,
+              enable_thinking: this.config.enableThinking ?? compatibleOptions.enableThinking ?? true,
+            }
+          : (this.config.enableThinking ?? compatibleOptions.enableThinking) !== undefined
+            ? { enable_thinking: this.config.enableThinking ?? compatibleOptions.enableThinking }
+            : {}),
+
+        ...(compatibleOptions.thinkingBudget !== undefined
+          ? { thinking_budget: compatibleOptions.thinkingBudget }
+          : {}),
+
         verbosity: compatibleOptions.textVerbosity,
 
         // messages:
@@ -979,7 +1003,7 @@ const createOpenAICompatibleChatChunkSchema = <
                 .array(
                   z
                     .object({
-                      index: z.number(),
+                      index: z.number().nullish(),
                       id: z.string().nullish(),
                       function: z.object({
                         name: z.string().nullish(),

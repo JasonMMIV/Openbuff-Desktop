@@ -549,7 +549,7 @@ function withConfiguredReasoningEffort(
   providerOptions: Record<string, JSONObject> | undefined,
   reasoningEffort: string | undefined,
 ): Record<string, JSONObject> | undefined {
-  if (!reasoningEffort) return providerOptions
+  if (!reasoningEffort || reasoningEffort === 'default') return providerOptions
 
   return {
     ...(providerOptions ?? {}),

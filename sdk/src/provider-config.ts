@@ -39,6 +39,8 @@ const providerModeNames = ['default', 'plan', 'executePlan'] as const
 type ProviderModeName = (typeof providerModeNames)[number]
 export const reasoningEffortSchema = z.enum([
   'high',
+  'extra-high',
+  'max',
   'medium',
   'low',
   'minimal',
@@ -223,6 +225,10 @@ const openAICompatibleProviderSchema = z
     modelCapabilities: modelCapabilitiesByModelSchema.optional(),
     /** Discovery settings for auto-fetching available models from the provider endpoint. */
     discovery: providerDiscoverySchema.optional(),
+    /** Enable thinking / reasoning tokens on providers like DashScope (Alibaba Cloud). */
+    enableThinking: z.boolean().optional(),
+    /** Custom request body parameters to merge into API requests for this provider. */
+    customBody: z.record(z.string(), z.unknown()).optional(),
   })
   .refine(
     (provider) =>
