@@ -28,7 +28,20 @@ export interface ProviderConfig {
 export interface TaskMessage {
   kind: string
   text?: string
-  tool?: { toolName: string; status: string; agentType?: string; detail?: string }
+  reasoning?: string
+  files?: FileChange[]
+  tool?: { toolName: string; status: string; agentType?: string; detail?: string; todos?: unknown[] }
+}
+
+export interface FileChange {
+  path: string
+  action: 'create' | 'modify' | 'delete'
+}
+
+/** Todo list carried on a write_todos tool card. */
+export interface TodoItem {
+  task: string
+  completed: boolean
 }
 
 export interface TaskRecord {
@@ -544,6 +557,46 @@ export function loadTaskCheckpoint(taskId: string): unknown | null {
   }
 }
 
+/** Delete a task's mid-turn checkpoint file (called after a turn completes successfully). */
+export function deleteTaskCheckpoint(taskId: string): void {
+  if (!isValidTaskId(taskId)) return
+  const file = checkpointPath(taskId)
+  if (!file) return
+  try {
+    rmSync(file, { force: true })
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+export interface RecoveryFileInfo {
+  runStateMtime: number | null
+  checkpointMtime: number | null
+}
+
+/** Modification times of the persisted recovery files, for staleness comparison. */
+export function getRecoveryFileInfo(taskId: string): RecoveryFileInfo {
+  const info: RecoveryFileInfo = { runStateMtime: null, checkpointMtime: null }
+  if (!isValidTaskId(taskId)) return info
+  const rs = runStatePath(taskId)
+  if (rs) {
+    try {
+      info.runStateMtime = statSync(rs).mtimeMs
+    } catch {
+      // missing file
+    }
+  }
+  const cp = checkpointPath(taskId)
+  if (cp) {
+    try {
+      info.checkpointMtime = statSync(cp).mtimeMs
+    } catch {
+      // missing file
+    }
+  }
+  return info
+}
+
 /** Load a task's transcript; returns null when the task has no transcript. */
 export function loadTaskTranscript(taskId: string): TaskMessage[] | null {
   try {
@@ -611,7 +664,11 @@ export function renameTask(taskId: string, newPrompt: string): boolean {
   return found
 }
 
-export function saveProjectTask(cwd: string, prompt: string): TaskRecord {
+/**
+ * Create a task record for a conversation, or return the existing one when
+ * called with an id that already exists (one record per conversation, not per message).
+ */
+export function ensureProjectTask(cwd: string, title: string, taskId?: string): TaskRecord {
   const s = loadSettings()
   s.projects = s.projects ?? []
   const name = cwd.split(/[\\/]/).pop() || cwd
@@ -623,8 +680,12 @@ export function saveProjectTask(cwd: string, prompt: string): TaskRecord {
     // Move to the front (most recently used)
     s.projects = s.projects.filter((p) => p.path !== cwd)
     s.projects.unshift(project)
+    if (taskId) {
+      const existing = project.tasks.find((t) => t.id === taskId)
+      if (existing) return existing
+    }
   }
-  const task: TaskRecord = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, prompt, createdAt: Date.now() }
+  const task: TaskRecord = { id: taskId || `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, prompt: title.slice(0, 300), createdAt: Date.now() }
   project.tasks.unshift(task)
   if (project.tasks.length > 100) project.tasks = project.tasks.slice(0, 100)
   saveSettings(s)

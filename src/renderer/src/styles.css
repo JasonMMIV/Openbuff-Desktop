@@ -1887,6 +1887,21 @@ textarea {
   max-width: 80%;
 }
 
+/* context-compaction notice: informational, not an error */
+.compaction-note {
+  background: var(--bg-1);
+  border-color: var(--border);
+  color: var(--text-1);
+}
+
+/* live indicator on running tasks in the sidebar */
+.task-running-spinner {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  border-width: 1.5px;
+}
+
 /* ─── Thought block (reasoning / <think>) ──────────────── */
 .thought-block {
   margin-bottom: 6px;

@@ -21,7 +21,8 @@ function toolLabel(name: string): string {
     switch (type) {
       case 'researcher-web':
       case 'researcher':
-        return 'Web search'
+        // Distinct from the web_search TOOL card ('Web search') to avoid confusion.
+        return 'Web research'
       case 'researcher-docs':
         return 'Docs search'
       case 'file-picker':

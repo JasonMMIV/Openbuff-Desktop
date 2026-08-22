@@ -14,7 +14,10 @@ export interface FileChange {
 
 export interface UiEvent {
   type: string
+  /** Task (conversation) this event belongs to — filter chat events by it. */
+  taskId?: string
   text?: string
+  action?: string
   toolName?: string
   status?: string
   agentType?: string
@@ -61,17 +64,15 @@ const api = {
     ipcRenderer.invoke('openbuff:saveLocalAgentFile', payload),
   readSkillFile: (path: string) => ipcRenderer.invoke('openbuff:readSkillFile', path),
   listProjects: () => ipcRenderer.invoke('openbuff:listProjects'),
-  saveTask: (payload: { cwd: string; prompt: string }) => ipcRenderer.invoke('openbuff:saveTask', payload),
   deleteTask: (taskId: string) => ipcRenderer.invoke('openbuff:deleteTask', taskId),
   renameTask: (payload: { taskId: string; newPrompt: string }) =>
     ipcRenderer.invoke('openbuff:renameTask', payload),
   removeProject: (projectPath: string) => ipcRenderer.invoke('openbuff:removeProject', projectPath),
-  saveTaskTranscript: (payload: { taskId: string; messages: unknown[] }) =>
-    ipcRenderer.invoke('openbuff:saveTaskTranscript', payload),
-  loadTaskTranscript: (taskId: string) => ipcRenderer.invoke('openbuff:loadTaskTranscript', taskId),
-  saveTaskRunState: (payload: { taskId: string; runState: unknown }) =>
-    ipcRenderer.invoke('openbuff:saveTaskRunState', payload),
-  loadTaskRunState: (taskId: string) => ipcRenderer.invoke('openbuff:loadTaskRunState', taskId),
+  /** Full snapshot of a conversation (transcript + status + resume info). */
+  getTaskView: (taskId: string) => ipcRenderer.invoke('openbuff:getTaskView', taskId),
+  /** Revert support: drop the last user turn from transcript + run state, keeping earlier context. */
+  trimTaskLastTurn: (payload: { taskId: string; userText: string }) =>
+    ipcRenderer.invoke('openbuff:trimTaskLastTurn', payload),
   searchHistory: (query: string) => ipcRenderer.invoke('openbuff:searchHistory', query),
   runPrompt: (payload: unknown) => ipcRenderer.invoke('openbuff:runPrompt', payload),
   abort: () => ipcRenderer.invoke('openbuff:abort'),

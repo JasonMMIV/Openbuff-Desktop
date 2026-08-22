@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, nativeTheme, screen } from 'electr
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs'
 import { homedir } from 'os'
 import { basename, join } from 'path'
-import { attachWindow, runPrompt, abortRun, isRunning, getLastLocalAgents, respondApproval } from './openbuff'
+import { attachWindow, startRun, abortRun, isRunning, getLastLocalAgents, respondApproval } from './openbuff'
 import { createLocalAgent, loadProjectLocalAgents, deleteLocalAgent, readLocalAgentFile, saveLocalAgentFile, type CreateLocalAgentInput } from './agents/local-agents'
 import {
   getAppSettings,
@@ -12,26 +12,27 @@ import {
   applySettingsToEnv,
   saveCwd,
   listProjects,
-  saveProjectTask,
   deleteTask,
   renameTask,
   removeProject,
-  saveTaskTranscript,
-  loadTaskTranscript,
-  saveTaskRunState,
-  loadTaskRunState,
   searchHistory,
   touchProject,
   type ProviderConfig,
   type ReasoningEffort,
   type ApprovalMode,
-  type TaskMessage,
   type AgentRoute
 } from './settings'
+import {
+  getOrCreateSession,
+  getRunningTaskId,
+  getSessionSnapshot,
+  isTaskRunning,
+  dropSession,
+  trimLastTurn
+} from './session-store'
 import { bundledAgents } from './agents/bundled-agents'
 import { listFiles, listDir, readProjectFile, getGitBranch, getGitDiff, gitAcceptFile, gitRevertFile, projectName } from './fs-utils'
 import { writeFileSync } from 'fs'
-import type { RunState } from '@openbuff/sdk'
 
 // Handle global uncaught errors gracefully to prevent silent crashes
 process.on('uncaughtException', (error) => {
@@ -289,6 +290,7 @@ function registerIpc(): void {
       cwd: settings.cwd,
       settings,
       running: isRunning(),
+      runningTaskId: getRunningTaskId(),
       agentIds: Object.keys(bundledAgents).sort()
     }
   })
@@ -383,13 +385,10 @@ function registerIpc(): void {
     return listProjects()
   })
 
-  ipcMain.handle('openbuff:saveTask', (_e, payload: { cwd: string; prompt: string }) => {
-    if (!payload.cwd || !payload.prompt.trim()) return { ok: false, error: 'Missing cwd or prompt' }
-    return { ok: true, task: saveProjectTask(payload.cwd, payload.prompt.trim()) }
-  })
-
   ipcMain.handle('openbuff:deleteTask', (_e, taskId: string) => {
     if (!taskId) return { ok: false, error: 'Missing taskId' }
+    if (isTaskRunning(taskId)) return { ok: false, error: 'Stop the running task before deleting it.' }
+    dropSession(taskId)
     deleteTask(taskId)
     return { ok: true }
   })
@@ -404,84 +403,70 @@ function registerIpc(): void {
 
   ipcMain.handle('openbuff:removeProject', (_e, projectPath: string) => {
     if (!projectPath) return { ok: false, error: 'Missing projectPath' }
+    const project = getAppSettings().projects.find((p) => p.path === projectPath)
+    const runningInside = (project?.tasks ?? []).some((t) => isTaskRunning(t.id))
+    if (runningInside) {
+      return { ok: false, error: 'Stop the running task before removing this project.' }
+    }
+    for (const t of project?.tasks ?? []) {
+      dropSession(t.id)
+    }
     const ok = removeProject(projectPath)
     return { ok }
   })
 
-  ipcMain.handle('openbuff:saveTaskTranscript', (_e, payload: { taskId: string; messages: TaskMessage[] }) => {
-    if (!payload.taskId) return { ok: false, error: 'Missing taskId' }
-    return { ok: saveTaskTranscript(payload.taskId, payload.messages ?? []) }
-  })
-
-  ipcMain.handle('openbuff:loadTaskTranscript', (_e, taskId: string) => {
+  /** Full view snapshot of a conversation: transcript + status + resume info. */
+  ipcMain.handle('openbuff:getTaskView', (_e, taskId: string) => {
     if (!taskId) return { ok: false, error: 'Missing taskId' }
-    const messages = loadTaskTranscript(taskId)
-    return messages ? { ok: true, messages } : { ok: false, error: 'No transcript for this task' }
+    const snapshot = getSessionSnapshot(taskId)
+    return { ok: true, ...snapshot }
   })
 
-  ipcMain.handle('openbuff:saveTaskRunState', (_e, payload: { taskId: string; runState: unknown }) => {
-    if (!payload.taskId) return { ok: false, error: 'Missing taskId' }
-    return { ok: saveTaskRunState(payload.taskId, payload.runState) }
-  })
-
-  ipcMain.handle('openbuff:loadTaskRunState', (_e, taskId: string) => {
-    if (!taskId) return { ok: false, error: 'Missing taskId' }
-    const runState = loadTaskRunState(taskId)
-    return runState ? { ok: true, runState } : { ok: false, error: 'No run state for this task' }
+  /**
+   * Revert support: drop the last user turn (and everything after it) from the
+   * persisted transcript AND the SDK run state, keeping earlier context.
+   */
+  ipcMain.handle('openbuff:trimTaskLastTurn', (_e, payload: { taskId: string; userText: string }) => {
+    if (!payload?.taskId || !payload.userText) return { ok: false, error: 'Invalid payload' }
+    if (isTaskRunning(payload.taskId)) return { ok: false, error: 'Stop the running task first.' }
+    const ok = trimLastTurn(payload.taskId, payload.userText)
+    return ok ? { ok: true } : { ok: false, error: 'Original turn not found in this conversation.' }
   })
 
   ipcMain.handle('openbuff:searchHistory', async (_e, query: string) => {
     return await searchHistory(query)
   })
 
-  ipcMain.handle('openbuff:runPrompt', async (_e, payload: {
-    cwd: string
-    prompt: string
-    previousRun?: RunState | null
-    resume?: boolean
-    taskId?: string
-  }) => {
-    if (!payload.cwd || !payload.prompt.trim()) return { ok: false, error: 'Missing project folder or prompt' }
-    if (isRunning()) return { ok: false, error: 'Another task is already running' }
+  ipcMain.handle(
+    'openbuff:runPrompt',
+    async (_e, payload: {
+      cwd: string
+      prompt: string
+      displayText?: string
+      /** Existing conversation to continue; omitted = start a new one. */
+      taskId?: string
+      resume?: boolean
+    }) => {
+      if (!payload.cwd || !payload.prompt.trim()) return { ok: false, error: 'Missing project folder or prompt' }
+      if (isRunning()) return { ok: false, error: 'Another task is already running' }
 
-    // Load provider settings in the main process before each run
-    applySettingsToEnv()
+      // One record per conversation: reuse the provided task or create a new one.
+      // The record title comes from what the user typed (not the expanded prompt).
+      const title = (payload.displayText ?? payload.prompt).trim().slice(0, 300)
+      let taskId = typeof payload.taskId === 'string' && payload.taskId ? payload.taskId : undefined
+      const entry = getOrCreateSession(payload.cwd, title, taskId)
+      taskId = entry.taskId
 
-    const result = await new Promise<{ runState: RunState | null; error: string | null }>((resolve) => {
-      void runPrompt(payload.cwd, payload.prompt, payload.previousRun ?? undefined, (runState, error) => {
-        resolve({ runState, error })
-      }, { resume: payload.resume === true, taskId: payload.taskId })
-    })
-
-    if (result.error) return { ok: false, error: result.error }
-    // An error-typed output means the run ended in failure (user stop, API error,
-    // timeout) but its state was preserved — the UI can offer to resume from it.
-    const output = result.runState?.output
-    const interrupted = output?.type === 'error'
-    if (!interrupted) return { ok: true, runState: result.runState, interrupted }
-
-    const rawMessage = [output.message, output.error]
-      .filter((v): v is string => typeof v === 'string' && v.length > 0)
-      .join(' ') || 'Run failed'
-    // Classify the failure so the UI can show an accurate reason instead of a
-    // generic "interrupted" message (e.g. quota/rate-limit vs user stop).
-    const lower = rawMessage.toLowerCase()
-    let reason: string
-    if (/abort|aborted|cancelled|canceled/.test(lower) && !/quota|rate/.test(lower)) {
-      reason = 'stopped'
-    } else if (/quota|rate limit|rate_limit|429/.test(lower)) {
-      reason = 'rate-limit'
-    } else if (/invalid api key|unauthorized|401|403|authentication|auth/i.test(lower)) {
-      reason = 'auth'
-    } else if (/timed out|timeout/.test(lower)) {
-      reason = 'timeout'
-    } else if (/network|fetch failed|socket|econnreset|econnrefused|enotfound|etimedout/i.test(lower)) {
-      reason = 'network'
-    } else {
-      reason = 'error'
+      applySettingsToEnv()
+      return await startRun({
+        cwd: payload.cwd,
+        prompt: payload.prompt,
+        displayText: payload.displayText ?? payload.prompt,
+        taskId,
+        resume: payload.resume === true
+      })
     }
-    return { ok: true, runState: result.runState, interrupted, reason, errorMessage: rawMessage }
-  })
+  )
 
   ipcMain.handle('openbuff:abort', () => {
     abortRun()

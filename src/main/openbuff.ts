@@ -1,15 +1,29 @@
 import { OpenbuffClient, type PrintModeEvent, type RunState } from '@openbuff/sdk'
 import type { BrowserWindow } from 'electron'
-import { applySettingsToEnv, saveTaskCheckpoint, loadSettings } from './settings'
+import { applySettingsToEnv, saveTaskCheckpoint, loadTaskRunState, loadSettings } from './settings'
 import { bundledAgents } from './agents/bundled-agents'
 import { patchBundledAgents } from './agents/patch'
 import { loadProjectLocalAgents, type LocalAgentsResult } from './agents/local-agents'
+import {
+  applyEvent,
+  beginResumeTurn,
+  beginUserTurn,
+  buildResumableState,
+  classifyFailure,
+  finishRun,
+  getSession,
+  markRunning
+} from './session-store'
 import type { QueryIndexData, QueryIndexQuery, QueryIndexResult } from '../shared/codebase-index'
 
 /**
  * Embeds OpenbuffClient in the main process.
- * - Events (tool_call, text, subagent_start, etc.) are normalized and pushed to the renderer
- * - Stream chunks are forwarded live (assistant message text)
+ * - The run is owned here and tied to a taskId from the session store; renderer
+ *   navigation can never interrupt it or lose its history.
+ * - Events (tool_call, text, subagent_start, etc.) are normalized, tagged with
+ *   the taskId, persisted into the session transcript, and pushed to the
+ *   renderer.
+ * - Stream chunks are forwarded live (assistant message text).
  */
 
 export interface TodoItem {
@@ -24,7 +38,10 @@ export interface FileChange {
 
 export interface UiEvent {
   type: string
+  /** Task (conversation) this event belongs to — the renderer filters by it. */
+  taskId?: string
   text?: string
+  action?: string
   toolName?: string
   status?: string
   agentType?: string
@@ -213,8 +230,9 @@ function extractQueryIndexData(output: unknown): QueryIndexData | undefined {
 }
 
 let client: OpenbuffClient | null = null
-let currentCwd: string | undefined
 let currentAbort: AbortController | null = null
+/** Task id of the active run — used to tag every outgoing event. */
+let activeRunTaskId: string | null = null
 let mainWindow: BrowserWindow | null = null
 let pendingApprovalResolver: ((approved: boolean) => void) | null = null
 
@@ -235,8 +253,11 @@ export function attachWindow(win: BrowserWindow): void {
 
 function sendEvent(event: UiEvent): void {
   if (event.type === 'ignored') return
+  // Tag every run-derived event with the owning task so the renderer can
+  // route it to the right conversation view.
+  const tagged = event.taskId ? event : { ...event, taskId: activeRunTaskId ?? undefined }
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('openbuff:event', event)
+    mainWindow.webContents.send('openbuff:event', tagged)
   }
 }
 
@@ -411,6 +432,11 @@ function normalizeEvent(event: PrintModeEvent): UiEvent {
     case 'phase':
       base.status = String(e.status ?? '')
       break
+    case 'context_compaction':
+      // Surfaced so users understand why very old context may be summarized.
+      base.action = String(e.action ?? '')
+      base.status = String(e.action ?? '')
+      break
     case 'reasoning_delta':
       base.text = String(e.delta ?? e.chunk ?? e.text ?? '')
       break
@@ -462,26 +488,52 @@ async function buildAgentDefinitions(cwd: string): Promise<{ definitions: Record
   return { definitions: merged, local }
 }
 
-export interface RunPromptOptions {
-  /** Resume an interrupted turn: the user prompt is already in the run state's history. */
-  resume?: boolean
-  /** Task id used to persist mid-turn checkpoints (crash recovery). */
+export interface RunResult {
+  ok: boolean
   taskId?: string
+  error?: string
+  interrupted?: boolean
+  reason?: string
+  errorMessage?: string
 }
 
-export async function runPrompt(
-  cwd: string,
-  prompt: string,
-  previousRun: RunState | undefined,
-  onDone: (runState: RunState | null, error: string | null) => void,
-  opts: RunPromptOptions = {}
-): Promise<void> {
-  if (currentAbort) {
-    onDone(null, 'Another task is already running')
-    return
-  }
-  currentCwd = cwd
+export interface StartRunOptions {
+  cwd: string
+  /** Final prompt sent to the SDK (attachments/skills already resolved). */
+  prompt: string
+  /** Raw user text persisted in the transcript. */
+  displayText: string
+  taskId: string
+  /** Resume an interrupted turn (Resume banner) — supports checkpoint recovery. */
+  resume?: boolean
+}
+
+/**
+ * Run the agent for a conversation. The run is owned by the main process and
+ * keyed by taskId; all context resolution (previousRun) happens here, so the
+ * renderer never needs to hold or restore an opaque state blob.
+ */
+export async function startRun(opts: StartRunOptions): Promise<RunResult> {
+  const { cwd, prompt, displayText, taskId } = opts
+
+  if (currentAbort) return { ok: false, taskId, error: 'Another task is already running' }
+
+  const entry = getSession(taskId)
+  if (!entry) return { ok: false, taskId, error: 'Unknown task' }
+  if (!prompt.trim()) return { ok: false, taskId, error: 'Empty prompt' }
+
   currentAbort = new AbortController()
+  activeRunTaskId = taskId
+  markRunning(taskId)
+
+  // Open a fresh assistant bubble in the transcript (and the user message for
+  // non-resume turns), then announce the run so any view can show its status.
+  if (opts.resume === true) {
+    beginResumeTurn(taskId)
+  } else {
+    beginUserTurn(taskId, displayText || prompt.trim())
+  }
+  sendEvent({ type: 'run_status', status: 'running', taskId })
 
   try {
     // Apply provider settings (API key + config path) before each run
@@ -498,6 +550,26 @@ export async function runPrompt(
       sendEvent({ type: 'error', message: `Custom agents failed to load: ${agentLoadError instanceof Error ? agentLoadError.message : String(agentLoadError)}` })
     }
     const currentSettings = loadSettings()
+
+    // Resolve conversation context here — never from the renderer.
+    let previousRun: unknown | undefined
+    let resumeInterruptedTurn = false
+    if (opts.resume === true) {
+      // Resume path: prefer the freshest recoverable state. A mid-turn
+      // checkpoint newer than the saved run state means a crash happened
+      // mid-turn; splice it into the last known session shell.
+      const resumable = buildResumableState(taskId)
+      previousRun = resumable?.previousRun ?? undefined
+      // Only skip re-appending the prompt when the restored history already
+      // contains it (checkpoint splice). Plain error-state resumes keep the
+      // SDK's default behavior.
+      resumeInterruptedTurn = resumable?.source === 'checkpoint'
+    } else {
+      // Plain continuation: the last completed turn's state only — never a
+      // mid-turn checkpoint (its pending prompt would duplicate the turn).
+      previousRun = entry.runState ?? loadTaskRunState(taskId) ?? undefined
+    }
+
     client = new OpenbuffClient({
       cwd,
       agentDefinitions: Object.values(definitions),
@@ -512,18 +584,18 @@ export async function runPrompt(
           prev(false)
         }
 
-        sendEvent({
-          type: 'approval_request',
-          message: `${request.action}: ${request.target}`,
-          raw: request
-        })
+        sendEvent({ type: 'approval_request', message: `${request.action}: ${request.target}`, raw: request })
 
         return new Promise<boolean>((resolve) => {
           pendingApprovalResolver = resolve
         })
       },
       handleEvent: (event) => {
-        sendEvent(normalizeEvent(event))
+        const normalized = normalizeEvent(event)
+        if (normalized.type !== 'ignored') {
+          applyEvent(taskId, normalized)
+          sendEvent(normalized)
+        }
       },
       handleStreamChunk: (chunk) => {
         // Only the main agent's plain-text chunks belong in the assistant bubble.
@@ -531,12 +603,17 @@ export async function runPrompt(
         // choose to render them separately — they must not be appended to the
         // main assistant message (that caused duplicated/spliced replies).
         if (typeof chunk === 'string') {
+          applyEvent(taskId, { type: 'stream', text: chunk })
           sendEvent({ type: 'stream', text: chunk })
         } else if (chunk && typeof chunk === 'object' && 'chunk' in chunk) {
           if (chunk.type === 'subagent_chunk') {
-            sendEvent({ type: 'subagent_stream', text: String(chunk.chunk), agentType: chunk.agentType ? String(chunk.agentType) : undefined })
+            const ev = { type: 'subagent_stream', text: String(chunk.chunk), agentType: chunk.agentType ? String(chunk.agentType) : undefined }
+            applyEvent(taskId, ev)
+            sendEvent(ev)
           } else if (chunk.type === 'reasoning_chunk') {
-            sendEvent({ type: 'reasoning_stream', text: String(chunk.chunk) })
+            const ev = { type: 'reasoning_stream', text: String(chunk.chunk) }
+            applyEvent(taskId, ev)
+            sendEvent(ev)
           }
         }
       },
@@ -546,29 +623,35 @@ export async function runPrompt(
     const runState = await client.run({
       agent: 'base2',
       prompt,
-      previousRun,
+      previousRun: previousRun as RunState | undefined,
       signal: currentAbort.signal,
-      // When resuming, the user prompt is already present in the restored history;
-      // the SDK must not re-append it (otherwise the turn would run twice).
-      resumeInterruptedTurn: opts.resume === true,
+      // When resuming from a checkpoint-spliced state the user prompt is
+      // already present in the restored history; the SDK must not re-append it.
+      resumeInterruptedTurn,
       // Persist a mid-turn checkpoint every ~30s so a crashed session can be
       // resumed from the last checkpoint instead of losing in-flight work.
       onCheckpoint: (agentState) => {
-        if (opts.taskId) {
-          try {
-            saveTaskCheckpoint(opts.taskId, agentState)
-          } catch {
-            // checkpoint persistence is best-effort; never kill the run
-          }
+        try {
+          saveTaskCheckpoint(taskId, agentState)
+        } catch {
+          // checkpoint persistence is best-effort; never kill the run
         }
       }
     })
 
-    onDone(runState, null)
+    return finalizeRunResult(taskId, runState)
   } catch (error) {
     // The SDK resolves (not rejects) on abort/API errors, so this only fires on
     // unexpected failures. Report the error so the UI can offer to retry.
-    onDone(null, error instanceof Error ? error.message : String(error))
+    finishRun(taskId, null, { interrupted: true, errorMessage: error instanceof Error ? error.message : String(error) })
+    sendEvent({ type: 'run_status', status: 'interrupted', taskId })
+    return {
+      ok: false,
+      taskId,
+      error: error instanceof Error ? error.message : String(error),
+      interrupted: true,
+      reason: 'error'
+    }
   } finally {
     if (pendingApprovalResolver) {
       const fn = pendingApprovalResolver
@@ -576,8 +659,32 @@ export async function runPrompt(
       fn(false)
     }
     client = null
-    currentCwd = undefined
+    activeRunTaskId = null
     currentAbort = null
+  }
+}
+
+function finalizeRunResult(taskId: string, runState: RunState): RunResult {
+  const output = runState.output as { type?: string; message?: string; error?: string } | undefined
+  const interrupted = output?.type === 'error'
+
+  if (!interrupted) {
+    finishRun(taskId, runState, { interrupted: false })
+    sendEvent({ type: 'run_status', status: 'idle', taskId })
+    return { ok: true, taskId, interrupted: false }
+  }
+
+  const rawMessage =
+    [output?.message, output?.error].filter((v): v is string => typeof v === 'string' && v.length > 0).join(' ') ||
+    'Run failed'
+  finishRun(taskId, runState, { interrupted: true, errorMessage: rawMessage })
+  sendEvent({ type: 'run_status', status: 'interrupted', taskId })
+  return {
+    ok: true,
+    taskId,
+    interrupted: true,
+    reason: classifyFailure(rawMessage),
+    errorMessage: rawMessage
   }
 }
 
@@ -588,8 +695,4 @@ export function abortRun(): void {
     fn(false)
   }
   currentAbort?.abort()
-}
-
-export function getCurrentCwd(): string | undefined {
-  return currentCwd
 }

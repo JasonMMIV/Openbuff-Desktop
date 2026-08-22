@@ -46,6 +46,8 @@ interface SidebarProps {
   searchResults: SearchResult[]
   onSearchJump: (r: SearchResult) => void
   projects: ProjectRecord[]
+  /** Task that owns the active agent run — shown with a live indicator. */
+  runningTaskId?: string | null
   onNewProject: () => void
   onOpenProject: (path: string) => void
   onOpenTask: (project: ProjectRecord, task: TaskRecord) => void
@@ -271,6 +273,9 @@ export default function Sidebar(props: SidebarProps) {
                         }}
                         title={t.prompt}
                       >
+                        {t.id === props.runningTaskId ? (
+                          <span className="spinner-ring task-running-spinner" />
+                        ) : null}
                         <span className="task-text">{t.prompt}</span>
                         <span className="task-time">{timeAgo(t.createdAt)}</span>
                       </button>

@@ -37,6 +37,7 @@ type ChatItem =
   | { kind: 'assistant'; text: string; reasoning?: string }
   | { kind: 'tool'; tool: ToolItem }
   | { kind: 'file-changes'; files: FileChange[] }
+  | { kind: 'compaction'; text: string }
   | { kind: 'system'; text: string }
 
 /** Silent background polling / internal tools that should be hidden from the UI timeline */
@@ -65,17 +66,6 @@ const MAX_PROMPT_HEIGHT = 160
 
 // Browser preview mode: renders the full UI with mock data when Electron preload is absent
 const IS_PREVIEW = typeof window.openbuff === 'undefined'
-
-/** Classify a raw failure message into a short reason key (mirrors the main process logic). */
-function classifyRunFailure(rawMessage: string): string {
-  const lower = rawMessage.toLowerCase()
-  if (/abort|aborted|cancelled|canceled/.test(lower) && !/quota|rate/.test(lower)) return 'stopped'
-  if (/quota|rate limit|rate_limit|429/.test(lower)) return 'rate-limit'
-  if (/invalid api key|unauthorized|401|403|authentication|auth/i.test(lower)) return 'auth'
-  if (/timed out|timeout/.test(lower)) return 'timeout'
-  if (/network|fetch failed|socket|econnreset|econnrefused|enotfound|etimedout/i.test(lower)) return 'network'
-  return 'error'
-}
 
 /** Human-readable banner text per failure reason. */
 function resumeBannerText(reason: string | undefined): string {
@@ -313,17 +303,17 @@ export default function App() {
   const [todoPanelCollapsed, setTodoPanelCollapsed] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
   const [zoomLevel, setZoomLevel] = useState(100)
+  /** The conversation that owns the active agent run (may differ from the view). */
+  const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
 
-  const previousRunRef = useRef<unknown>(null)
-  const streamRef = useRef('')
-  const reasoningRef = useRef('')
+  /** View state: which conversation is displayed (also the event-routing key). */
+  const currentTaskRef = useRef<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const toolIndexRef = useRef(-1)
   const changedFilesRef = useRef<string[]>([])
   const accumulatedFileChangesRef = useRef<FileChange[]>([])
   const settingsRef = useRef(settings)
   settingsRef.current = settings
-  const currentTaskRef = useRef<string | null>(null)
   const projectMenuRef = useRef<HTMLDivElement>(null)
   const msgRefs = useRef<(HTMLDivElement | null)[]>([])
 
@@ -500,6 +490,7 @@ export default function App() {
       }
       setCwd(state.cwd)
       setRunning(state.running)
+      setRunningTaskId((state as { runningTaskId?: string | null }).runningTaskId ?? null)
       setHasProvider(state.settings.hasProvider)
       setSettings({
         providers: state.settings.providers,
@@ -533,6 +524,50 @@ export default function App() {
   useEffect(() => {
     if (IS_PREVIEW) return
     const unsubscribe = window.openbuff.onEvent((event) => {
+      /* ── Global lifecycle events (apply regardless of visible conversation) ── */
+
+      // Run ownership lives in the main process; these events keep the global
+      // running indicator accurate even when viewing another conversation.
+      if (event.type === 'run_status') {
+        if (event.status === 'running') {
+          setRunning(true)
+          if (event.taskId) setRunningTaskId(event.taskId)
+        } else {
+          setRunning(false)
+          setRunningTaskId(null)
+        }
+        return
+      }
+
+      // Approval requests pause the single active run wherever it is — always surface.
+      if (event.type === 'approval_request') {
+        setApprovalRequest({ message: event.message ?? 'Permission requested', raw: event.raw })
+        return
+      }
+
+      if (event.type === 'context_window' && typeof event.used === 'number' && typeof event.max === 'number') {
+        setTokenUsage({ used: event.used, max: event.max })
+        return
+      }
+
+      // Cost accumulates across all runs even when their conversations are not visible.
+      if (event.type === 'finish' && typeof event.totalCost === 'number') {
+        setTotalCost((c) => c + event.totalCost!)
+      }
+
+      /* ── Conversation-scoped events ── */
+      // Route by taskId so background runs never pollute the visible timeline.
+      if (!event.taskId || event.taskId !== currentTaskRef.current) return
+
+      if (event.type === 'context_compaction') {
+        const note =
+          event.action === 'mechanical_trim'
+            ? 'Older tool outputs were trimmed to fit the context window.'
+            : 'Earlier messages were summarized to fit the context window.'
+        setChatItems((prev) => [...prev, { kind: 'compaction', text: note }])
+        return
+      }
+
       if (event.type === 'reasoning_stream' || event.type === 'reasoning_delta') {
         const delta = event.text ?? ''
         if (!delta) return
@@ -660,17 +695,8 @@ export default function App() {
         return
       }
 
-      if (event.type === 'context_window' && typeof event.used === 'number' && typeof event.max === 'number') {
-        setTokenUsage({ used: event.used, max: event.max })
-        return
-      }
-
       if (event.type === 'finish') {
         setActiveTodos([])
-        if (typeof event.totalCost === 'number') {
-          const cost = event.totalCost
-          setTotalCost((c) => c + cost)
-        }
         // Insert file changes summary if files were modified
         const fileChanges = accumulatedFileChangesRef.current
         if (fileChanges.length > 0) {
@@ -687,10 +713,6 @@ export default function App() {
           setChatItems((prev) => [...prev, { kind: 'file-changes', files: summaryFiles }])
         }
         accumulatedFileChangesRef.current = []
-      }
-
-      if (event.type === 'approval_request') {
-        setApprovalRequest({ message: event.message ?? 'Permission requested', raw: event.raw })
         return
       }
 
@@ -799,8 +821,6 @@ export default function App() {
       setCwd(path as string)
       setChatItems([])
       setEvents([])
-      streamRef.current = ''
-      reasoningRef.current = ''
       setNotice(null)
       setAttachments([])
       setTokenUsage(null)
@@ -887,8 +907,6 @@ export default function App() {
         return
       }
       setPrompt('')
-      streamRef.current = ''
-      reasoningRef.current = ''
       changedFilesRef.current = []
       accumulatedFileChangesRef.current = []
       setFollowups([])
@@ -897,11 +915,11 @@ export default function App() {
       setNotice(null)
       setHistoryTask(null)
       setResumeInfo(null)
-      if (!IS_PREVIEW) {
-        const res = (await window.openbuff.saveTask({ cwd, prompt: text.slice(0, 300) })) as { ok: boolean; task?: { id: string } }
-        currentTaskRef.current = res?.ok ? res.task?.id ?? null : null
+      // New conversations get their id up front so streamed events route to
+      // this view immediately; existing conversations reuse their id.
+      if (!currentTaskRef.current && !IS_PREVIEW) {
+        currentTaskRef.current = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
       }
-      refreshProjects()
 
     const finalPrompt = await buildFinalPrompt(text)
 
@@ -913,7 +931,6 @@ export default function App() {
         i += 4
         if (i >= reply.length) {
           clearInterval(timer)
-          streamRef.current = reply
           setChatItems((prev) => {
             const next = [...prev]
             next[next.length - 1] = { kind: 'assistant', text: reply }
@@ -922,7 +939,6 @@ export default function App() {
           setRunning(false)
           setStopping(false)
         } else {
-          streamRef.current = reply.slice(0, i)
           setChatItems((prev) => {
             const next = [...prev]
             next[next.length - 1] = { kind: 'assistant', text: reply.slice(0, i) }
@@ -933,15 +949,24 @@ export default function App() {
       return
     }
     try {
-      const result = (await window.openbuff.runPrompt({
+      // The main process owns the run and all conversation context. Passing the
+      // existing taskId continues that conversation with full history; omitting
+      // it starts (and names) a new one.
+      const runPromise = window.openbuff.runPrompt({
         cwd,
         prompt: finalPrompt,
-        previousRun: previousRunRef.current
-      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean; reason?: string; errorMessage?: string }
+        displayText: text,
+        taskId: currentTaskRef.current ?? undefined
+      }) as Promise<{ ok: boolean; taskId?: string; error?: string; interrupted?: boolean; reason?: string; errorMessage?: string }>
+      // The task record is created synchronously at the start of the main-process
+      // handler — refresh the sidebar immediately so the conversation shows up
+      // (and is reachable) while it is still streaming.
+      refreshProjects()
+      const result = await runPromise
       if (!result.ok) {
         setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Execution failed' }])
       } else {
-        previousRunRef.current = result.runState
+        if (result.taskId) currentTaskRef.current = result.taskId
         // Failed (stopped or API error) runs preserve their state; offer to resume.
         if (result.interrupted) {
           setResumeInfo({ prompt: text, reason: result.reason, errorMessage: result.errorMessage })
@@ -955,26 +980,6 @@ export default function App() {
       setStopping(false)
       setApprovalRequest(null)
       setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
-      // Persist the finished conversation transcript + SDK run state to the task's own files
-      if (!IS_PREVIEW) {
-        const taskId = currentTaskRef.current
-        if (taskId) {
-          setTimeout(() => {
-            if (currentTaskRef.current !== taskId) return
-            const messages = chatItemsRef.current.map((item) =>
-              item.kind === 'tool'
-                ? { kind: 'tool', tool: item.tool }
-                : item.kind === 'assistant'
-                ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
-                : item.kind === 'file-changes'
-                ? { kind: 'file-changes', files: item.files }
-                : { kind: item.kind, text: item.text }
-            )
-            void window.openbuff.saveTaskTranscript({ taskId, messages })
-            void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
-          }, 300)
-        }
-      }
     }
   }, [prompt, cwd, running, buildFinalPrompt, refreshProjects, openAgentWizard])
 
@@ -988,13 +993,12 @@ export default function App() {
   // Resume an interrupted run from its preserved state (no re-appending the user prompt).
   const resumeRun = useCallback(async () => {
     const info = resumeInfo
-    if (!info || !cwd || running) return
+    const taskId = currentTaskRef.current
+    if (!info || !cwd || running || !taskId) return
     setRunning(true)
     setNotice(null)
     setResumeInfo(null)
     setChatItems((prev) => [...prev, { kind: 'assistant', text: '' }])
-    streamRef.current = ''
-    reasoningRef.current = ''
     if (IS_PREVIEW) {
       setRunning(false)
       setStopping(false)
@@ -1002,59 +1006,40 @@ export default function App() {
       return
     }
     try {
+      // The main process resolves the best preserved state: the interrupted
+      // run's own state, or a fresher mid-turn checkpoint after a crash.
       const result = (await window.openbuff.runPrompt({
         cwd,
         prompt: info.prompt,
-        previousRun: previousRunRef.current,
         resume: true,
-        taskId: currentTaskRef.current ?? undefined
-      })) as { ok: boolean; error?: string; runState?: unknown; interrupted?: boolean; reason?: string; errorMessage?: string }
+        taskId
+      })) as { ok: boolean; taskId?: string; error?: string; interrupted?: boolean; reason?: string; errorMessage?: string }
       if (!result.ok) {
         setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Resume failed' }])
-      } else {
-        previousRunRef.current = result.runState
-        if (result.interrupted) setResumeInfo({ prompt: info.prompt, reason: result.reason, errorMessage: result.errorMessage })
+      } else if (result.interrupted) {
+        setResumeInfo({ prompt: info.prompt, reason: result.reason, errorMessage: result.errorMessage })
       }
       void window.openbuff.gitBranch(cwd).then(setBranch)
+      refreshProjects()
     } catch (err) {
       setChatItems((prev) => [...prev, { kind: 'system', text: String(err) }])
     } finally {
       setRunning(false)
       setStopping(false)
       setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
-      const taskId = currentTaskRef.current
-      if (taskId) {
-        setTimeout(() => {
-          if (currentTaskRef.current !== taskId) return
-          const messages = chatItemsRef.current.map((item) =>
-            item.kind === 'tool'
-              ? { kind: 'tool', tool: item.tool }
-              : item.kind === 'assistant'
-              ? { kind: 'assistant', text: item.text, reasoning: item.reasoning }
-              : item.kind === 'file-changes'
-              ? { kind: 'file-changes', files: item.files }
-              : { kind: item.kind, text: item.text }
-          )
-          void window.openbuff.saveTaskTranscript({ taskId, messages })
-          void window.openbuff.saveTaskRunState({ taskId, runState: previousRunRef.current })
-        }, 300)
-      }
     }
-  }, [resumeInfo, cwd, running])
+  }, [resumeInfo, cwd, running, refreshProjects])
 
-  // Discard the preserved state so the next send starts a fresh turn.
+  // Discard the banner; the preserved state simply stays on disk unused.
   const discardResume = useCallback(() => {
-    previousRunRef.current = null
     setResumeInfo(null)
   }, [])
 
-
   const newTask = useCallback(() => {
+    // Only resets the VIEW — any active run keeps going in the background and
+    // its conversation stays fully persisted in the main-process session store.
     setChatItems([])
     setEvents([])
-    streamRef.current = ''
-    reasoningRef.current = ''
-    previousRunRef.current = null
     changedFilesRef.current = []
     accumulatedFileChangesRef.current = []
     setAttachments([])
@@ -1100,13 +1085,11 @@ export default function App() {
       setPrompt(lastUserText)
     }
     setEvents([])
-    streamRef.current = ''
-    reasoningRef.current = ''
-    previousRunRef.current = null
     changedFilesRef.current = []
     accumulatedFileChangesRef.current = []
     setFollowups([])
     setHistoryTask(null)
+    setResumeInfo(null)
     // Undo the file changes in parallel so a large exchange doesn't stall the UI.
     let okCount = 0
     const errors: string[] = []
@@ -1126,12 +1109,30 @@ export default function App() {
     } else {
       okCount = files.length
     }
-    // Remove this exchange from persisted history (task record + transcript + runState files).
+    // Persisted history: trim the reverted turn (transcript + SDK run state)
+    // so the conversation KEEPS its earlier context. The task record survives —
+    // resending the edited message continues this same conversation.
     const taskId = currentTaskRef.current
-    currentTaskRef.current = null
     if (taskId && !IS_PREVIEW) {
-      void window.openbuff.deleteTask(taskId)
-      refreshProjects()
+      if (lastUserText) {
+        const res = (await window.openbuff.trimTaskLastTurn({ taskId, userText: lastUserText })) as {
+          ok: boolean
+          error?: string
+        }
+        if (res?.ok) {
+          refreshProjects()
+        } else {
+          // Turn not found in the persisted state — remove the whole record.
+          currentTaskRef.current = null
+          void window.openbuff.deleteTask(taskId)
+          refreshProjects()
+        }
+      } else {
+        // No user message to anchor the trim — remove the whole record.
+        currentTaskRef.current = null
+        void window.openbuff.deleteTask(taskId)
+        refreshProjects()
+      }
     }
     if (errors.length > 0) {
       setNotice(`Reverted ${okCount}/${files.length} file(s). ${errors.slice(0, 3).join('; ')}`)
@@ -1380,12 +1381,13 @@ export default function App() {
     async (path: string) => {
       if (path === cwd) return
       if (IS_PREVIEW) return
+      // Switching projects only changes the view — a running task keeps going
+      // in the background and its history stays persisted in the main process.
       setCwd(path)
       setChatItems([])
       setEvents([])
-      streamRef.current = ''
-      reasoningRef.current = ''
-      previousRunRef.current = null
+      changedFilesRef.current = []
+      accumulatedFileChangesRef.current = []
       setAttachments([])
       setTokenUsage(null)
       setTotalCost(0)
@@ -1403,30 +1405,36 @@ export default function App() {
   const onOpenTask = useCallback(
     async (project: ProjectRecord, task: TaskRecord) => {
       await onOpenProject(project.path)
-      currentTaskRef.current = task.id
-      let msgs: unknown[] = []
       if (IS_PREVIEW) {
-        msgs = task.messages ?? []
-      } else {
-        const [transcript, runStateRes] = await Promise.all([
-          window.openbuff.loadTaskTranscript(task.id),
-          window.openbuff.loadTaskRunState(task.id)
-        ])
-        const t = transcript as { ok: boolean; messages?: unknown[] }
-        msgs = t.ok ? t.messages ?? [] : []
-        const rs = runStateRes as { ok: boolean; runState?: { output?: { type?: string; message?: string; error?: string } } }
-        previousRunRef.current = rs.ok ? (rs.runState ?? null) : null
-        // If the saved run state ended in an error (interrupted/failed), offer to resume it.
-        if (rs.ok && rs.runState?.output?.type === 'error') {
-          const out = rs.runState.output
-          const raw = [out.message, out.error].filter((v): v is string => typeof v === 'string' && v.length > 0).join(' ') || undefined
-          setResumeInfo({ prompt: task.prompt, reason: raw ? classifyRunFailure(raw) : 'error', errorMessage: raw })
-        } else {
-          setResumeInfo(null)
-        }
+        currentTaskRef.current = task.id
+        setChatItems((task.messages ?? []) as ChatItem[])
+        setHistoryTask({ id: task.id, prompt: task.prompt })
+        setPrompt('')
+        return
       }
-      setChatItems(msgs as ChatItem[])
+      // Re-attach = load the full snapshot (transcript + status + resume info)
+      // from the main-process session store. The event gate opens only AFTER
+      // the snapshot lands so live deltas apply on top of it, never under it.
+      const view = (await window.openbuff.getTaskView(task.id)) as {
+        ok: boolean
+        transcript?: ChatItem[]
+        status?: string
+        canResume?: boolean
+        resumeReason?: string
+        resumeErrorMessage?: string
+      }
       setHistoryTask({ id: task.id, prompt: task.prompt })
+      setChatItems((view.ok ? view.transcript ?? [] : []) as ChatItem[])
+      currentTaskRef.current = task.id
+      if (view.ok && view.canResume && view.status !== 'running') {
+        setResumeInfo({
+          prompt: task.prompt,
+          reason: view.resumeReason ?? 'error',
+          errorMessage: view.resumeErrorMessage
+        })
+      } else {
+        setResumeInfo(null)
+      }
       setPrompt('')
     },
     [onOpenProject]
@@ -1457,7 +1465,11 @@ export default function App() {
   const onDeleteTask = useCallback(
     async (project: ProjectRecord, task: TaskRecord) => {
       if (!IS_PREVIEW) {
-        await window.openbuff.deleteTask(task.id)
+        const res = (await window.openbuff.deleteTask(task.id)) as { ok: boolean; error?: string }
+        if (!res?.ok) {
+          setNotice(res?.error ?? 'Failed to delete the task.')
+          return
+        }
       }
       setProjects((prev) =>
         prev.map((p) => {
@@ -1478,15 +1490,19 @@ export default function App() {
   const onRemoveProject = useCallback(
     async (project: ProjectRecord) => {
       if (!IS_PREVIEW) {
-        await window.openbuff.removeProject(project.path)
+        const res = (await window.openbuff.removeProject(project.path)) as { ok: boolean; error?: string }
+        if (!res?.ok) {
+          setNotice(res?.error ?? 'Failed to remove the project.')
+          return
+        }
       }
       setProjects((prev) => prev.filter((p) => p.path !== project.path))
       const isCurrentProjectTask = historyTask && project.tasks.some((t) => t.id === historyTask.id)
-      if (isCurrentProjectTask || (cwd === project.path && !running)) {
+      if (isCurrentProjectTask || cwd === project.path) {
         newTask()
       }
     },
-    [cwd, historyTask, newTask, running]
+    [cwd, historyTask, newTask]
   )
 
   const onSearchJump = useCallback(
@@ -1557,7 +1573,8 @@ export default function App() {
 
   const streaming = running && chatItems.length > 0
   const currentStage = deriveStage(events, running)
-  const canSwitchProject = !running && chatItems.length === 0 && !historyTask
+  // Runs live in the main process now — navigating is always safe.
+  const canSwitchProject = chatItems.length === 0 && !historyTask
 
   const models = settings.providers
 
@@ -1661,6 +1678,7 @@ export default function App() {
               searchResults={searchResults}
               onSearchJump={onSearchJump}
               projects={projects}
+              runningTaskId={runningTaskId}
               onNewProject={() => void selectFolder()}
               onOpenProject={(p) => void onOpenProject(p)}
               onOpenTask={(p, t) => void onOpenTask(p, t)}
@@ -1724,7 +1742,10 @@ export default function App() {
                   </div>
                   {branch && <span className="branch-badge">⎇ {branch}</span>}
                   {running && (
-                    <span className="running-badge">
+                    <span
+                      className="running-badge"
+                      title={runningTaskId && runningTaskId !== currentTaskRef.current ? 'A task is running in another conversation' : undefined}
+                    >
                       <span className="spinner-ring" /> {currentStage ?? 'Working'}
                     </span>
                   )}
@@ -1850,6 +1871,13 @@ export default function App() {
                         return (
                           <div key={i} ref={(el) => { msgRefs.current[i] = el }}>
                             <FileChangesSummary files={item.files} />
+                          </div>
+                        )
+                      }
+                      if (item.kind === 'compaction') {
+                        return (
+                          <div key={i} className="msg-row system" ref={(el) => { msgRefs.current[i] = el }}>
+                            <span className="system-bubble compaction-note">ℹ {item.text}</span>
                           </div>
                         )
                       }
