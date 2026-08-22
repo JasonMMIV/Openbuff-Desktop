@@ -316,6 +316,7 @@ export default function App() {
     setActiveViewTaskId(id)
   }, [])
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const autoScrollRef = useRef(true)
   const toolIndexRef = useRef(-1)
   const changedFilesRef = useRef<string[]>([])
   const accumulatedFileChangesRef = useRef<FileChange[]>([])
@@ -522,10 +523,18 @@ export default function App() {
     void window.openbuff.listSkills(cwd).then((s) => setSkills(s as SkillInfo[]))
   }, [cwd])
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom — paused while the user has scrolled up to read
+  // history; scrolling back near the bottom resumes following the stream.
   useEffect(() => {
+    if (!autoScrollRef.current) return
     chatScrollRef.current?.scrollTo({ top: chatScrollRef.current.scrollHeight })
   }, [chatItems])
+
+  const handleChatScroll = useCallback(() => {
+    const el = chatScrollRef.current
+    if (!el) return
+    autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  }, [])
 
   // SDK events → UI
   useEffect(() => {
@@ -826,6 +835,7 @@ export default function App() {
     const path = await window.openbuff.selectFolder()
     if (path) {
       setCwd(path as string)
+      autoScrollRef.current = true
       setChatItems([])
       setEvents([])
       setNotice(null)
@@ -917,6 +927,7 @@ export default function App() {
       changedFilesRef.current = []
       accumulatedFileChangesRef.current = []
       setFollowups([])
+      autoScrollRef.current = true
       setChatItems((prev) => [...prev, { kind: 'user', text }, { kind: 'assistant', text: '' }])
       setRunning(true)
       setNotice(null)
@@ -1050,6 +1061,7 @@ export default function App() {
     // Only resets the VIEW — any active run keeps going in the background and
     // its conversation stays fully persisted in the main-process session store.
     setChatItems([])
+    autoScrollRef.current = true
     setEvents([])
     changedFilesRef.current = []
     accumulatedFileChangesRef.current = []
@@ -1395,6 +1407,7 @@ export default function App() {
       // Switching projects only changes the view — a running task keeps going
       // in the background and its history stays persisted in the main process.
       setCwd(path)
+      autoScrollRef.current = true
       setChatItems([])
       setEvents([])
       changedFilesRef.current = []
@@ -1830,7 +1843,7 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  <div className="chat-scroll" ref={chatScrollRef}>
+                  <div className="chat-scroll" ref={chatScrollRef} onScroll={handleChatScroll}>
                     {!hasProvider && (
                       <div className="provider-warn">
                         <span>No provider configured. Please set up your API key and model in Settings.</span>
