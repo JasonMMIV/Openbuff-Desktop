@@ -164,7 +164,7 @@ async function authorizeReadTarget(params: {
   if (!isSafeProjectRelativePath(requestedPath)) {
     return {
       ok: false,
-      displayPath: requestedPath,
+      displayPath: toPortablePath(requestedPath),
       error: filesystemError(
         'outside_project',
         FILE_READ_STATUS.OUTSIDE_PROJECT,
@@ -181,7 +181,7 @@ async function authorizeReadTarget(params: {
   if (!resolved) {
     return {
       ok: false,
-      displayPath: requestedPath,
+      displayPath: toPortablePath(requestedPath),
       error: filesystemError(
         'outside_project',
         FILE_READ_STATUS.OUTSIDE_PROJECT,
@@ -212,7 +212,7 @@ async function authorizeReadTarget(params: {
   if (aliases.some(isMandatorySensitiveReadPath)) {
     return {
       ok: false,
-      displayPath: resolved.relativePath,
+      displayPath: toPortablePath(resolved.relativePath),
       error: filesystemError('blocked', FILE_READ_STATUS.IGNORED, {
         retryable: false,
       }),
@@ -225,7 +225,7 @@ async function authorizeReadTarget(params: {
   if (filterResults.some((result) => result.status === 'blocked')) {
     return {
       ok: false,
-      displayPath: resolved.relativePath,
+      displayPath: toPortablePath(resolved.relativePath),
       error: filesystemError('blocked', FILE_READ_STATUS.IGNORED, {
         retryable: false,
       }),
@@ -242,7 +242,7 @@ async function authorizeReadTarget(params: {
   return {
     ok: true,
     target: {
-      displayPath: resolved.relativePath,
+      displayPath: toPortablePath(resolved.relativePath),
       operationPath: resolved.operationPath,
       isExampleFile,
     },

@@ -24,6 +24,10 @@ function sanitizePartialRangeContent(content: string): string {
     : sanitizedHeader + content.slice(headerEnd)
 }
 
+function toComparableToolPath(value: string): string {
+  return value.replace(/\\/g, '/')
+}
+
 export async function getFileReadingUpdates(params: {
   requestFiles: RequestFilesFn
   requestedFiles: string[]
@@ -53,7 +57,7 @@ export async function getFileReadingUpdates(params: {
           expected !== undefined &&
           result.requestIndex === requestIndex &&
           result.selector === expected.selector &&
-          result.path === expected.path &&
+          toComparableToolPath(result.path) === toComparableToolPath(expected.path) &&
           (expected.selector !== 'range' ||
             (result.selector === 'range' &&
               (result.status === 'error' ||
@@ -95,7 +99,7 @@ export async function getFileReadingUpdates(params: {
         returned &&
         returned.requestIndex === requestIndex &&
         returned.selector === selector.selector &&
-        returned.path === selector.path &&
+        toComparableToolPath(returned.path) === toComparableToolPath(selector.path) &&
         returned.status === 'error'
       ) {
         return returned
