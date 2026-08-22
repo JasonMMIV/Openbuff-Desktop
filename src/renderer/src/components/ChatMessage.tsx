@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { renderMarkdown } from '../utils/markdown'
-import { ChevronIcon, ChevronDownIcon, CopyIcon, LightbulbIcon, ListIcon, TriangleIcon, UndoIcon } from './Icons'
+import { ChevronDownIcon, CopyIcon, LightbulbIcon, ListIcon, TriangleIcon, UndoIcon } from './Icons'
 
 export interface TodoTodo {
   task: string
@@ -236,8 +236,9 @@ export function ToolCard({ tool, isLast }: { tool: ToolItem; isLast: boolean }) 
 
   const hasDetail = Boolean(tool.detail?.trim())
   const hasTodos = tool.toolName === 'write_todos' && Array.isArray(tool.todos) && tool.todos.length > 0
-  const webResults = hasDetail && isSearchTool(tool.toolName) ? parseWebResults(tool.detail ?? '') : null
-  const formattedDetail = hasDetail && !webResults && !hasTodos ? formatToolDetail(tool.detail ?? '') : null
+  // Skip parsing/formatting entirely while the card stays collapsed
+  const webResults = open && hasDetail && isSearchTool(tool.toolName) ? parseWebResults(tool.detail ?? '') : null
+  const formattedDetail = open && hasDetail && !webResults && !hasTodos ? formatToolDetail(tool.detail ?? '') : null
 
   // For write_todos: show a summary in the header and render the checklist inline
   const todoSummary = hasTodos
@@ -299,8 +300,7 @@ export function ThoughtBlock({
   streaming: boolean
 }) {
   // Collapsed by default; clicking the header expands it.
-  const [userToggled, setUserToggled] = useState<boolean | null>(null)
-  const open = userToggled ?? false
+  const [open, setOpen] = useState(false)
 
   const trimmed = reasoning.trim()
   if (!trimmed && !streaming) return null
@@ -309,7 +309,7 @@ export function ThoughtBlock({
     <div className={`thought-block ${streaming ? 'thinking' : 'done'}`}>
       <div
         className="thought-head"
-        onClick={() => setUserToggled((prev) => (prev !== null ? !prev : !open))}
+        onClick={() => setOpen((o) => !o)}
       >
         <span className="thought-icon">{streaming ? '💭' : <LightbulbIcon size={14} />}</span>
         <span className="thought-label">{streaming ? 'Thinking…' : 'Thinking'}</span>
