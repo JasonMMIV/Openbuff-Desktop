@@ -120,12 +120,6 @@ function extractMutationFiles(toolName: string, input: unknown): string[] {
       }
       break
     }
-    case 'apply_patch': {
-      const op = rec.operation
-      if (op && typeof op === 'object') push((op as Record<string, unknown>).path)
-      push(rec.path)
-      break
-    }
     case 'write_file':
     case 'str_replace':
     case 'replace_range':
@@ -169,22 +163,6 @@ function extractFileChanges(toolName: string, input: unknown): FileChange[] {
           }
         }
       }
-      break
-    }
-    case 'apply_patch': {
-      const op = rec.operation
-      if (op && typeof op === 'object') {
-        const opRec = op as Record<string, unknown>
-        const operation = String(opRec.operation ?? '').toLowerCase()
-        if (operation === 'create') {
-          add(opRec.path, 'create')
-        } else if (operation === 'delete') {
-          add(opRec.path, 'delete')
-        } else {
-          add(opRec.path, 'modify')
-        }
-      }
-      add(rec.path, 'modify')
       break
     }
     case 'write_file':
