@@ -119,13 +119,23 @@ export async function gitStatus(params: {
 
   const status = await runGit(statusArgs, params.cwd, params.signal)
   if (status.exitCode !== 0) {
+    const stderr = status.stderr.trim()
+    if (stderr.toLowerCase().includes('not a git repository')) {
+      return [
+        {
+          type: 'json',
+          value: {
+            status: 'Not a git repository.',
+          },
+        },
+      ]
+    }
     return [
       {
         type: 'json',
         value: {
-          errorMessage:
-            status.stderr.trim() ||
-            `git status exited with code ${status.exitCode}.`,
+          errorMessage: stderr || `git status exited with code ${status.exitCode}.`,
+          status: '',
         },
       },
     ]
@@ -172,6 +182,7 @@ export async function gitStatus(params: {
             errorMessage:
               diffResult.stderr.trim() ||
               `git diff exited with code ${diffResult.exitCode}.`,
+            status: statusBody,
           },
         },
       ]
