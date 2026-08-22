@@ -311,7 +311,7 @@ export function ThoughtBlock({
         className="thought-head"
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="thought-icon">{streaming ? '💭' : <LightbulbIcon size={14} />}</span>
+        <span className="thought-icon"><LightbulbIcon size={14} /></span>
         <span className="thought-label">{streaming ? 'Thinking…' : 'Thinking'}</span>
       </div>
       {open && (
