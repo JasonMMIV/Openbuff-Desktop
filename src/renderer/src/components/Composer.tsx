@@ -33,6 +33,9 @@ interface ComposerProps {
   onSearchRequest: () => void
   running: boolean
   stopping?: boolean
+  /** Another conversation's run is active — sending is temporarily blocked. */
+  sendBlocked?: boolean
+  sendBlockedHint?: string
   disabled: boolean
   attachments: Attachment[]
   onAttachFiles: () => void
@@ -122,6 +125,8 @@ export default function Composer(props: ComposerProps) {
     onSearchRequest,
     running,
     stopping,
+    sendBlocked,
+    sendBlockedHint,
     disabled,
     attachments,
     onAttachFiles,
@@ -302,7 +307,7 @@ export default function Composer(props: ComposerProps) {
             }
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
-              if (!running) onSend()
+              if (!running && !sendBlocked) onSend()
             }
           }}
           onClick={() => setMention(detectMention(prompt, textareaRef.current?.selectionStart ?? prompt.length))}
@@ -371,7 +376,12 @@ export default function Composer(props: ComposerProps) {
             <StopIcon size={14} />
           </button>
         ) : (
-          <button className="btn primary send-btn" onClick={onSend} disabled={disabled || !prompt.trim()} title="Send (Enter)">
+          <button
+            className="btn primary send-btn"
+            onClick={onSend}
+            disabled={disabled || sendBlocked || !prompt.trim()}
+            title={sendBlocked ? (sendBlockedHint ?? 'Another task is running') : 'Send (Enter)'}
+          >
             <ArrowUpIcon size={16} />
           </button>
         )}

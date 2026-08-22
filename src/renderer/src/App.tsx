@@ -305,9 +305,16 @@ export default function App() {
   const [zoomLevel, setZoomLevel] = useState(100)
   /** The conversation that owns the active agent run (may differ from the view). */
   const [runningTaskId, setRunningTaskId] = useState<string | null>(null)
+  /** Reactive mirror of currentTaskRef — which conversation is displayed. */
+  const [activeViewTaskId, setActiveViewTaskId] = useState<string | null>(null)
 
   /** View state: which conversation is displayed (also the event-routing key). */
   const currentTaskRef = useRef<string | null>(null)
+  /** Keep the ref and its reactive mirror in sync at every view switch. */
+  const setViewTask = useCallback((id: string | null) => {
+    currentTaskRef.current = id
+    setActiveViewTaskId(id)
+  }, [])
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const toolIndexRef = useRef(-1)
   const changedFilesRef = useRef<string[]>([])
@@ -827,10 +834,10 @@ export default function App() {
       setTotalCost(0)
       setHistoryTask(null)
       setResumeInfo(null)
-      currentTaskRef.current = null
+      setViewTask(null)
       refreshProjects()
     }
-  }, [refreshProjects])
+  }, [refreshProjects, setViewTask])
 
   // Compose final prompt: resolve @ files, /skills, and attachments
   const buildFinalPrompt = useCallback(
@@ -918,8 +925,11 @@ export default function App() {
       // New conversations get their id up front so streamed events route to
       // this view immediately; existing conversations reuse their id.
       if (!currentTaskRef.current && !IS_PREVIEW) {
-        currentTaskRef.current = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+        const newId = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+        setViewTask(newId)
       }
+      // Optimistic: this view owns the run until events say otherwise.
+      if (!IS_PREVIEW) setRunningTaskId(currentTaskRef.current)
 
     const finalPrompt = await buildFinalPrompt(text)
 
@@ -966,7 +976,7 @@ export default function App() {
       if (!result.ok) {
         setChatItems((prev) => [...prev, { kind: 'system', text: result.error ?? 'Execution failed' }])
       } else {
-        if (result.taskId) currentTaskRef.current = result.taskId
+        if (result.taskId) setViewTask(result.taskId)
         // Failed (stopped or API error) runs preserve their state; offer to resume.
         if (result.interrupted) {
           setResumeInfo({ prompt: text, reason: result.reason, errorMessage: result.errorMessage })
@@ -981,7 +991,7 @@ export default function App() {
       setApprovalRequest(null)
       setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
     }
-  }, [prompt, cwd, running, buildFinalPrompt, refreshProjects, openAgentWizard])
+  }, [prompt, cwd, running, buildFinalPrompt, refreshProjects, openAgentWizard, setViewTask])
 
   const stop = useCallback(() => {
     setApprovalRequest(null)
@@ -996,6 +1006,7 @@ export default function App() {
     const taskId = currentTaskRef.current
     if (!info || !cwd || running || !taskId) return
     setRunning(true)
+    setRunningTaskId(taskId)
     setNotice(null)
     setResumeInfo(null)
     setChatItems((prev) => [...prev, { kind: 'assistant', text: '' }])
@@ -1049,8 +1060,8 @@ export default function App() {
     setPrompt('')
     setHistoryTask(null)
     setResumeInfo(null)
-    currentTaskRef.current = null
-  }, [])
+    setViewTask(null)
+  }, [setViewTask])
 
   // Clicking Revert opens an in-app confirmation instead of blocking window.confirm.
   const requestRevert = useCallback(() => {
@@ -1123,13 +1134,13 @@ export default function App() {
           refreshProjects()
         } else {
           // Turn not found in the persisted state — remove the whole record.
-          currentTaskRef.current = null
+          setViewTask(null)
           void window.openbuff.deleteTask(taskId)
           refreshProjects()
         }
       } else {
         // No user message to anchor the trim — remove the whole record.
-        currentTaskRef.current = null
+        setViewTask(null)
         void window.openbuff.deleteTask(taskId)
         refreshProjects()
       }
@@ -1394,19 +1405,19 @@ export default function App() {
       setSelectedFile(null)
       setHistoryTask(null)
       setResumeInfo(null)
-      currentTaskRef.current = null
+      setViewTask(null)
       setProjectMenuOpen(false)
       const pname = (await window.openbuff.projectName(path)) as string
       setProjectName(pname)
     },
-    [cwd]
+    [cwd, setViewTask]
   )
 
   const onOpenTask = useCallback(
     async (project: ProjectRecord, task: TaskRecord) => {
       await onOpenProject(project.path)
       if (IS_PREVIEW) {
-        currentTaskRef.current = task.id
+        setViewTask(task.id)
         setChatItems((task.messages ?? []) as ChatItem[])
         setHistoryTask({ id: task.id, prompt: task.prompt })
         setPrompt('')
@@ -1425,7 +1436,7 @@ export default function App() {
       }
       setHistoryTask({ id: task.id, prompt: task.prompt })
       setChatItems((view.ok ? view.transcript ?? [] : []) as ChatItem[])
-      currentTaskRef.current = task.id
+      setViewTask(task.id)
       if (view.ok && view.canResume && view.status !== 'running') {
         setResumeInfo({
           prompt: task.prompt,
@@ -1437,7 +1448,7 @@ export default function App() {
       }
       setPrompt('')
     },
-    [onOpenProject]
+    [onOpenProject, setViewTask]
   )
 
   const onRenameTask = useCallback(
@@ -1571,7 +1582,14 @@ export default function App() {
     return () => clearTimeout(timer)
   }, [chatItems, pendingJump])
 
-  const streaming = running && chatItems.length > 0
+  // View-scoped run state: only the conversation being VIEWED shows streaming
+  // cursors, stop buttons, and activity animations — background runs elsewhere
+  // are surfaced via the sidebar spinner and the global topbar badge instead.
+  const viewRunning = running && runningTaskId !== null && runningTaskId === activeViewTaskId
+  const viewStopping = stopping && viewRunning
+  const busyElsewhere = running && !viewRunning
+
+  const streaming = viewRunning && chatItems.length > 0
   const currentStage = deriveStage(events, running)
   // Runs live in the main process now — navigating is always safe.
   const canSwitchProject = chatItems.length === 0 && !historyTask
@@ -1841,7 +1859,7 @@ export default function App() {
                             <UserBubble
                               text={item.text}
                               onCopy={() => void navigator.clipboard?.writeText(item.text)}
-                              onRevert={isLastUser && !running && !historyTask ? () => void requestRevert() : undefined}
+                              onRevert={isLastUser && !viewRunning && !historyTask ? () => void requestRevert() : undefined}
                             />
                           </div>
                         )
@@ -1915,7 +1933,7 @@ export default function App() {
                     )}
                   </div>
 
-                  {resumeInfo && !running && (
+                  {resumeInfo && !viewRunning && (
                     <div className={`resume-banner reason-${resumeInfo.reason ?? 'error'}`}>
                       <span className="resume-icon">{resumeInfo.reason === 'rate-limit' ? '⚠' : '↻'}</span>
                       <span className="resume-text">
@@ -1962,7 +1980,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {activeTodos.length > 0 && running && (
+                  {activeTodos.length > 0 && viewRunning && (
                     <div className="todo-panel-dock">
                       <TodoCard todos={activeTodos} collapsed={todoPanelCollapsed} onToggleCollapse={() => setTodoPanelCollapsed((c) => !c)} />
                     </div>
@@ -1976,8 +1994,10 @@ export default function App() {
                     onNewTask={newTask}
                     onInitRequest={openAgentWizard}
                     onSearchRequest={() => setSearchOpen(true)}
-                    running={running}
-                    stopping={stopping}
+                    running={viewRunning}
+                    stopping={viewStopping}
+                    sendBlocked={busyElsewhere}
+                    sendBlockedHint="Another task is still running — wait for it to finish or stop it first."
                     disabled={!hasProvider}
                     attachments={attachments}
                     onAttachFiles={() => void onAttachFiles()}
@@ -2008,7 +2028,7 @@ export default function App() {
               onOpenFile={(path) => void openFileByPath(path, basenameOf(path))}
               events={events}
               onCloseFile={() => setSelectedFile(null)}
-              running={running}
+              running={viewRunning}
             />
           </>
         )}
