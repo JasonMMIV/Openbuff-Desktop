@@ -32,6 +32,11 @@ export interface UiEvent {
   queryIndex?: QueryIndexData
   todos?: TodoItem[]
   raw?: unknown
+  /* auto_retry events */
+  attempt?: number
+  maxAttempts?: number
+  /** Unix ms when the next automatic retry will fire. */
+  nextAt?: number
 }
 
 const api = {

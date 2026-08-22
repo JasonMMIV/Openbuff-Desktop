@@ -56,6 +56,50 @@ export interface UiEvent {
   queryIndex?: QueryIndexData
   todos?: TodoItem[]
   raw?: unknown
+  /* auto_retry events */
+  attempt?: number
+  maxAttempts?: number
+  nextAt?: number
+}
+
+/* ─── Auto-retry on transient failures (network / timeout / rate-limit) ─── */
+
+/** Failure reasons eligible for automatic retry (classifyFailure keys). */
+const AUTO_RETRY_REASONS = new Set(['network', 'timeout', 'rate-limit'])
+/** Retries after the initial attempt (total attempts = 1 + AUTO_RETRY_MAX_RETRIES). */
+const AUTO_RETRY_MAX_RETRIES = 3
+const AUTO_RETRY_BASE_DELAY_MS = 2000
+const AUTO_RETRY_MAX_DELAY_MS = 10_000
+
+/** Exponential backoff with ±20% jitter: ~2s → ~4s → ~8s (capped). */
+function computeRetryDelayMs(retryNumber: number): number {
+  const exponent = Math.max(0, retryNumber - 1)
+  const base = Math.min(AUTO_RETRY_BASE_DELAY_MS * Math.pow(2, exponent), AUTO_RETRY_MAX_DELAY_MS)
+  return Math.round(base * (0.8 + Math.random() * 0.4))
+}
+
+/**
+ * Wait for the backoff delay. Resolves true when the delay elapsed and false
+ * when the abort signal fired (user pressed Stop during the wait).
+ */
+function waitForDelay(delayMs: number, signal: AbortSignal): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, delayMs)
+    function onAbort(): void {
+      cleanup()
+      resolve(false)
+    }
+    function done(): void {
+      cleanup()
+      resolve(true)
+    }
+    function cleanup(): void {
+      clearTimeout(timer)
+      signal.removeEventListener('abort', onAbort)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 /** File paths a tool mutates, keyed by tool name (mirrors the SDK's PATH_INPUTS). */
@@ -551,95 +595,156 @@ export async function startRun(opts: StartRunOptions): Promise<RunResult> {
     }
     const currentSettings = loadSettings()
 
-    // Resolve conversation context here — never from the renderer.
-    let previousRun: unknown | undefined
-    let resumeInterruptedTurn = false
-    if (opts.resume === true) {
-      // Resume path: prefer the freshest recoverable state. A mid-turn
-      // checkpoint newer than the saved run state means a crash happened
-      // mid-turn; splice it into the last known session shell.
-      const resumable = buildResumableState(taskId)
-      previousRun = resumable?.previousRun ?? undefined
-      // Only skip re-appending the prompt when the restored history already
-      // contains it (checkpoint splice). Plain error-state resumes keep the
-      // SDK's default behavior.
-      resumeInterruptedTurn = resumable?.source === 'checkpoint'
-    } else {
-      // Plain continuation: the last completed turn's state only — never a
-      // mid-turn checkpoint (its pending prompt would duplicate the turn).
-      previousRun = entry.runState ?? loadTaskRunState(taskId) ?? undefined
-    }
+    let attempt = 0
+    while (true) {
+      attempt++
 
-    client = new OpenbuffClient({
-      cwd,
-      agentDefinitions: Object.values(definitions),
-      approvalMode: currentSettings.approvalMode ?? 'balanced',
-      requestApproval: async (request: { action: string; target: string; reason?: string; risk?: string }) => {
-        if (!mainWindow || mainWindow.isDestroyed()) return false
+      // Resolve conversation context fresh on every attempt. Attempt 1 follows
+      // the caller's intent; automatic retries behave exactly like a manual
+      // Resume (memory → disk runstate → checkpoint splice), so a mid-turn
+      // crash during any attempt still recovers.
+      let previousRun: unknown | undefined
+      let resumeInterruptedTurn = false
+      if (attempt > 1 || opts.resume === true) {
+        const resumable = buildResumableState(taskId)
+        previousRun = resumable?.previousRun ?? undefined
+        resumeInterruptedTurn = resumable?.source === 'checkpoint'
+        if (attempt > 1) sendEvent({ type: 'run_status', status: 'running', taskId })
+      } else {
+        // Plain continuation: the last completed turn's state only — never a
+        // mid-turn checkpoint (its pending prompt would duplicate the turn).
+        previousRun = entry.runState ?? loadTaskRunState(taskId) ?? undefined
+      }
 
-        // Cancel previous pending approval if any
-        if (pendingApprovalResolver) {
-          const prev = pendingApprovalResolver
-          pendingApprovalResolver = null
-          prev(false)
-        }
+      client = new OpenbuffClient({
+        cwd,
+        agentDefinitions: Object.values(definitions),
+        approvalMode: currentSettings.approvalMode ?? 'balanced',
+        requestApproval: async (request: { action: string; target: string; reason?: string; risk?: string }) => {
+          if (!mainWindow || mainWindow.isDestroyed()) return false
 
-        sendEvent({ type: 'approval_request', message: `${request.action}: ${request.target}`, raw: request })
+          // Cancel previous pending approval if any
+          if (pendingApprovalResolver) {
+            const prev = pendingApprovalResolver
+            pendingApprovalResolver = null
+            prev(false)
+          }
 
-        return new Promise<boolean>((resolve) => {
-          pendingApprovalResolver = resolve
-        })
-      },
-      handleEvent: (event) => {
-        const normalized = normalizeEvent(event)
-        if (normalized.type !== 'ignored') {
-          applyEvent(taskId, normalized)
-          sendEvent(normalized)
-        }
-      },
-      handleStreamChunk: (chunk) => {
-        // Only the main agent's plain-text chunks belong in the assistant bubble.
-        // Sub-agent / reasoning chunks are forwarded as events so the UI can
-        // choose to render them separately — they must not be appended to the
-        // main assistant message (that caused duplicated/spliced replies).
-        if (typeof chunk === 'string') {
-          applyEvent(taskId, { type: 'stream', text: chunk })
-          sendEvent({ type: 'stream', text: chunk })
-        } else if (chunk && typeof chunk === 'object' && 'chunk' in chunk) {
-          if (chunk.type === 'subagent_chunk') {
-            const ev = { type: 'subagent_stream', text: String(chunk.chunk), agentType: chunk.agentType ? String(chunk.agentType) : undefined }
-            applyEvent(taskId, ev)
-            sendEvent(ev)
-          } else if (chunk.type === 'reasoning_chunk') {
-            const ev = { type: 'reasoning_stream', text: String(chunk.chunk) }
-            applyEvent(taskId, ev)
-            sendEvent(ev)
+          sendEvent({ type: 'approval_request', message: `${request.action}: ${request.target}`, raw: request })
+
+          return new Promise<boolean>((resolve) => {
+            pendingApprovalResolver = resolve
+          })
+        },
+        handleEvent: (event) => {
+          const normalized = normalizeEvent(event)
+          if (normalized.type !== 'ignored') {
+            applyEvent(taskId, normalized)
+            sendEvent(normalized)
+          }
+        },
+        handleStreamChunk: (chunk) => {
+          // Only the main agent's plain-text chunks belong in the assistant bubble.
+          // Sub-agent / reasoning chunks are forwarded as events so the UI can
+          // choose to render them separately — they must not be appended to the
+          // main assistant message (that caused duplicated/spliced replies).
+          if (typeof chunk === 'string') {
+            applyEvent(taskId, { type: 'stream', text: chunk })
+            sendEvent({ type: 'stream', text: chunk })
+          } else if (chunk && typeof chunk === 'object' && 'chunk' in chunk) {
+            if (chunk.type === 'subagent_chunk') {
+              const ev = { type: 'subagent_stream', text: String(chunk.chunk), agentType: chunk.agentType ? String(chunk.agentType) : undefined }
+              applyEvent(taskId, ev)
+              sendEvent(ev)
+            } else if (chunk.type === 'reasoning_chunk') {
+              const ev = { type: 'reasoning_stream', text: String(chunk.chunk) }
+              applyEvent(taskId, ev)
+              sendEvent(ev)
+            }
+          }
+        },
+        runTimeoutMs: 30 * 60 * 1000 // 30-minute safety timeout
+      })
+
+      const runState = await client.run({
+        agent: 'base2',
+        prompt,
+        previousRun: previousRun as RunState | undefined,
+        signal: currentAbort.signal,
+        // When resuming from a checkpoint-spliced state the user prompt is
+        // already present in the restored history; the SDK must not re-append it.
+        resumeInterruptedTurn,
+        // Persist a mid-turn checkpoint every ~30s so a crashed session can be
+        // resumed from the last checkpoint instead of losing in-flight work.
+        onCheckpoint: (agentState) => {
+          try {
+            saveTaskCheckpoint(taskId, agentState)
+          } catch {
+            // checkpoint persistence is best-effort; never kill the run
           }
         }
-      },
-      runTimeoutMs: 30 * 60 * 1000 // 30-minute safety timeout
-    })
+      })
 
-    const runState = await client.run({
-      agent: 'base2',
-      prompt,
-      previousRun: previousRun as RunState | undefined,
-      signal: currentAbort.signal,
-      // When resuming from a checkpoint-spliced state the user prompt is
-      // already present in the restored history; the SDK must not re-append it.
-      resumeInterruptedTurn,
-      // Persist a mid-turn checkpoint every ~30s so a crashed session can be
-      // resumed from the last checkpoint instead of losing in-flight work.
-      onCheckpoint: (agentState) => {
-        try {
-          saveTaskCheckpoint(taskId, agentState)
-        } catch {
-          // checkpoint persistence is best-effort; never kill the run
+      const failure = classifyInterrupted(runState)
+      if (!failure) {
+        finishRun(taskId, runState, { interrupted: false })
+        sendEvent({ type: 'run_status', status: 'idle', taskId })
+        return { ok: true, taskId, interrupted: false }
+      }
+
+      // Transient failures (network / timeout / rate-limit) auto-retry with
+      // backoff before giving up and falling back to the manual Resume banner.
+      const retryEligible =
+        !currentAbort.signal.aborted &&
+        failure.reason !== undefined &&
+        AUTO_RETRY_REASONS.has(failure.reason)
+      const canAutoRetry = retryEligible && attempt <= AUTO_RETRY_MAX_RETRIES
+
+      if (!canAutoRetry) {
+        finishRun(taskId, runState, { interrupted: true, errorMessage: failure.errorMessage })
+        sendEvent({ type: 'run_status', status: 'interrupted', taskId })
+        return {
+          ok: true,
+          taskId,
+          interrupted: true,
+          reason: failure.reason,
+          errorMessage: failure.errorMessage
         }
       }
-    })
 
-    return finalizeRunResult(taskId, runState)
+      // Persist the failed attempt's state (it becomes the retry's context and
+      // a crash-safety net) without spamming the transcript with the raw error —
+      // the next attempt will likely succeed and make the noise pointless.
+      finishRun(taskId, runState, { interrupted: true, errorMessage: failure.errorMessage, silentError: true })
+
+      const delayMs = computeRetryDelayMs(attempt)
+      sendEvent({
+        type: 'auto_retry',
+        taskId,
+        status: failure.reason,
+        message: autoRetryHeadline(failure.reason),
+        text: failure.errorMessage,
+        attempt: attempt + 1,
+        maxAttempts: AUTO_RETRY_MAX_RETRIES + 1,
+        nextAt: Date.now() + delayMs
+      })
+
+      const elapsed = await waitForDelay(delayMs, currentAbort.signal)
+      if (!elapsed) {
+        // User pressed Stop while waiting — treat as an intentional stop.
+        sendEvent({ type: 'run_status', status: 'interrupted', taskId })
+        return {
+          ok: true,
+          taskId,
+          interrupted: true,
+          reason: 'stopped',
+          errorMessage: failure.errorMessage
+        }
+      }
+
+      beginResumeTurn(taskId)
+      markRunning(taskId)
+    }
   } catch (error) {
     // The SDK resolves (not rejects) on abort/API errors, so this only fires on
     // unexpected failures. Report the error so the UI can offer to retry.
@@ -664,27 +769,32 @@ export async function startRun(opts: StartRunOptions): Promise<RunResult> {
   }
 }
 
-function finalizeRunResult(taskId: string, runState: RunState): RunResult {
+/**
+ * Classify a finished run state. Returns null when the run completed normally;
+ * otherwise carries the raw error message and its classified reason key.
+ */
+function classifyInterrupted(runState: RunState): { reason?: string; errorMessage?: string } | null {
   const output = runState.output as { type?: string; message?: string; error?: string } | undefined
   const interrupted = output?.type === 'error'
+  if (!interrupted) return null
 
-  if (!interrupted) {
-    finishRun(taskId, runState, { interrupted: false })
-    sendEvent({ type: 'run_status', status: 'idle', taskId })
-    return { ok: true, taskId, interrupted: false }
-  }
-
-  const rawMessage =
+  const errorMessage =
     [output?.message, output?.error].filter((v): v is string => typeof v === 'string' && v.length > 0).join(' ') ||
     'Run failed'
-  finishRun(taskId, runState, { interrupted: true, errorMessage: rawMessage })
-  sendEvent({ type: 'run_status', status: 'interrupted', taskId })
-  return {
-    ok: true,
-    taskId,
-    interrupted: true,
-    reason: classifyFailure(rawMessage),
-    errorMessage: rawMessage
+  return { reason: classifyFailure(errorMessage), errorMessage }
+}
+
+/** Short human headline per retryable failure reason (renderer mirrors this). */
+function autoRetryHeadline(reason: string | undefined): string {
+  switch (reason) {
+    case 'network':
+      return 'Network error — reconnecting automatically'
+    case 'timeout':
+      return 'Request timed out — retrying automatically'
+    case 'rate-limit':
+      return 'Rate limited — backing off before retrying'
+    default:
+      return 'Temporary issue — retrying automatically'
   }
 }
 

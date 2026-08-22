@@ -85,6 +85,23 @@ function resumeBannerText(reason: string | undefined): string {
   }
 }
 
+const RETRY_REASON_LABELS: Record<string, string> = {
+  network: 'Network error',
+  timeout: 'Request timed out',
+  'rate-limit': 'Rate limit exceeded'
+}
+
+/** Live countdown line for the in-chat auto-retry strip. */
+function autoRetryStripText(
+  notice: { attempt: number; maxAttempts: number; nextAt: number; reason?: string },
+  now: number
+): string {
+  const label = RETRY_REASON_LABELS[notice.reason ?? ''] ?? 'Temporary issue'
+  const remaining = Math.max(0, Math.ceil((notice.nextAt - now) / 1000))
+  if (remaining <= 0) return `${label} — retrying now…`
+  return `${label} — retrying in ${remaining}s (attempt ${notice.attempt} of ${notice.maxAttempts})`
+}
+
 const PREVIEW_SETTINGS: UiSettings = {
   providers: [
     { id: 'openai', label: 'OpenAI API', models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'] },
@@ -298,6 +315,17 @@ export default function App() {
   const [focusSignal, setFocusSignal] = useState(0)
   /** Set when the last run failed (stopped, API error, timeout) but its state was preserved. */
   const [resumeInfo, setResumeInfo] = useState<{ prompt: string; reason?: string; errorMessage?: string } | null>(null)
+  /** Live auto-retry countdown for a transient failure (network/timeout/rate-limit). Transient only. */
+  const [retryNotice, setRetryNotice] = useState<{
+    attempt: number
+    maxAttempts: number
+    nextAt: number
+    reason?: string
+    headline?: string
+    detail?: string
+  } | null>(null)
+  /** Ticking clock so the retry strip shows a live countdown. */
+  const [nowTick, setNowTick] = useState(() => Date.now())
   const [approvalRequest, setApprovalRequest] = useState<{ message: string; raw?: unknown } | null>(null)
   const [activeTodos, setActiveTodos] = useState<TodoTodo[]>([])
   const [todoPanelCollapsed, setTodoPanelCollapsed] = useState(false)
@@ -536,6 +564,13 @@ export default function App() {
     autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
   }, [])
 
+  // Tick while an auto-retry countdown is visible so its seconds stay live.
+  useEffect(() => {
+    if (!retryNotice) return
+    const timer = setInterval(() => setNowTick(Date.now()), 500)
+    return () => clearInterval(timer)
+  }, [retryNotice])
+
   // SDK events → UI
   useEffect(() => {
     if (IS_PREVIEW) return
@@ -552,6 +587,9 @@ export default function App() {
           setRunning(false)
           setRunningTaskId(null)
         }
+        // Any run transition ends the current retry wait (a new attempt is
+        // starting, or the run reached a terminal state).
+        setRetryNotice(null)
         return
       }
 
@@ -574,6 +612,19 @@ export default function App() {
       /* ── Conversation-scoped events ── */
       // Route by taskId so background runs never pollute the visible timeline.
       if (!event.taskId || event.taskId !== currentTaskRef.current) return
+
+      if (event.type === 'auto_retry') {
+        setRetryNotice({
+          attempt: Number(event.attempt ?? 0),
+          maxAttempts: Number(event.maxAttempts ?? 0),
+          nextAt: Number(event.nextAt ?? Date.now()),
+          reason: typeof event.status === 'string' ? event.status : undefined,
+          headline: typeof event.message === 'string' ? event.message : undefined,
+          detail: typeof event.text === 'string' ? event.text : undefined
+        })
+        setNowTick(Date.now())
+        return
+      }
 
       if (event.type === 'context_compaction') {
         const note =
@@ -999,6 +1050,7 @@ export default function App() {
     } finally {
       setRunning(false)
       setStopping(false)
+      setRetryNotice(null)
       setApprovalRequest(null)
       setNotice((prev) => (prev && prev.includes('Stop requested') ? null : prev))
     }
@@ -1945,6 +1997,20 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  {retryNotice && viewRunning && (
+                    <div className={`retry-strip reason-${retryNotice.reason ?? 'network'}`}>
+                      <span className="spinner-ring retry-spinner" />
+                      <span className="resume-text">
+                        <span className="resume-text-main">{autoRetryStripText(retryNotice, nowTick)}</span>
+                        {retryNotice.detail && (
+                          <span className="resume-text-detail" title={retryNotice.detail}>
+                            {retryNotice.detail.length > 220 ? `${retryNotice.detail.slice(0, 220)}…` : retryNotice.detail}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  )}
 
                   {resumeInfo && !viewRunning && (
                     <div className={`resume-banner reason-${resumeInfo.reason ?? 'error'}`}>

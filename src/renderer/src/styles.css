@@ -1902,6 +1902,27 @@ textarea {
   border-width: 1.5px;
 }
 
+/* Auto-retry status strip: transient failure recovery countdown */
+.retry-strip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 max(24px, calc((100% - 760px) / 2)) 10px;
+  padding: 8px 13px;
+  background: color-mix(in srgb, #f59e0b 8%, var(--bg-1));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: var(--radius-sm);
+}
+
+.retry-strip .retry-spinner {
+  width: 11px;
+  height: 11px;
+  min-width: 11px;
+  border-width: 2px;
+  border-color: rgba(245, 158, 11, 0.25);
+  border-top-color: #f59e0b;
+}
+
 /* ─── Thought block (reasoning / <think>) ──────────────── */
 .thought-block {
   margin-bottom: 6px;

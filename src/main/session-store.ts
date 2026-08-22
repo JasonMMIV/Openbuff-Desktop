@@ -332,7 +332,7 @@ export function markRunning(taskId: string): void {
 export function finishRun(
   taskId: string,
   runState: unknown | null,
-  opts: { interrupted: boolean; errorMessage?: string }
+  opts: { interrupted: boolean; errorMessage?: string; silentError?: boolean }
 ): void {
   clearFlushTimer(taskId)
   const entry = sessions.get(taskId)
@@ -342,7 +342,9 @@ export function finishRun(
     if (last && last.kind === 'assistant' && !last.text && !last.reasoning) {
       entry.transcript.pop()
     }
-    if (opts.interrupted && opts.errorMessage) {
+    // silentError: persist the failure state without printing the raw error —
+    // used by auto-retry attempts that may succeed on the next try.
+    if (opts.interrupted && opts.errorMessage && !opts.silentError) {
       pushSystem(entry, opts.errorMessage)
     }
 
